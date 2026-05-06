@@ -3524,6 +3524,56 @@
             document.getElementById('input-manual-id').value = '';
         }
 
+        // ============================================================
+        // FUNGSI JURU PENYELAMAT: JALANKAN KAMERA NATIVE HP
+        // ============================================================
+        function prosesFotoNative(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            tampilLoading(true);
+
+            const reader = new FileReader();
+            reader.onload = function (e) {
+                const img = new Image();
+                img.onload = function () {
+                    const canvas = document.createElement('canvas');
+                    const ctx = canvas.getContext('2d');
+
+                    // Batasi ukuran gambar agar jsQR tidak hang karena foto terlalu besar
+                    const MAX_WIDTH = 800;
+                    let width = img.width;
+                    let height = img.height;
+
+                    if (width > MAX_WIDTH) {
+                        height *= MAX_WIDTH / width;
+                        width = MAX_WIDTH;
+                    }
+
+                    canvas.width = width;
+                    canvas.height = height;
+                    ctx.drawImage(img, 0, 0, width, height);
+
+                    const imageData = ctx.getImageData(0, 0, width, height);
+
+                    if (typeof jsQR !== 'undefined') {
+                        const code = jsQR(imageData.data, imageData.width, imageData.height, { inversionAttempts: "attemptBoth" });
+                        if (code && code.data) {
+                            prosesHasilScan(code.data.trim().toUpperCase());
+                        } else {
+                            tampilToast('QR Code tidak terdeteksi di foto. Pastikan gambar tajam & ulangi!', 'error');
+                        }
+                    } else {
+                        tampilToast('Library jsQR tidak dimuat. Refresh halaman.', 'error');
+                    }
+                    tampilLoading(false);
+                    event.target.value = ''; // Reset input file agar bisa jepret ulang
+                };
+                img.src = e.target.result;
+            };
+            reader.readAsDataURL(file);
+        }
+
         async function prosesHasilScan(id) {
             const semua = [...appState.guru, ...appState.murid];
             const orang = semua.find(o => o.id === id);
@@ -3944,7 +3994,7 @@
             tampilToast('Sistem terhubung ke Database! بِسْمِ اللّٰهِ 🌙', 'sukses');
         }
 
-        window.addEventListener('DOMContentLoaded', init);    
+        window.addEventListener('DOMContentLoaded', init);  
     </script>
 </body>
 
