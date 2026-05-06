@@ -2653,71 +2653,82 @@
             guru: [],
             murid: [],
             jadwal: [],
-            kehadiran: [], // [{id, penggunaId, nama, role, tanggal, jamMasuk, jamPulang}]
-            catatan: {}, // {guruId: "teks catatan"}
+            kehadiran: [],
+            catatan: {},
         };
+
         let intervalJam = null;
         let streamKamera = null;
-        let intervalScan = null;
+        let isScanningKamera = false; // PERBAIKAN: Ganti intervalScan menjadi flag boolean
         let streamKiosk = null;
-        let intervalScanKiosk = null;
+        let isScanningKiosk = false;  // PERBAIKAN: Ganti intervalScanKiosk menjadi flag boolean
         let bulanKalender = new Date().getMonth();
         let tahunKalender = new Date().getFullYear();
 
         // ============================================================
-        // SUPABASE WRAPPER
+        // SINKRONISASI DATABASE (MIGRASI KE RELASIONAL SQL)
         // ============================================================
-        async function simpanKeCloud(kunci, nilai) {
-            localStorage.setItem('akd_' + kunci, JSON.stringify(nilai));
-            if (!supabaseClient) return;
-            try {
-                await supabaseClient.from('app_state').upsert({ key: kunci, data_json: JSON.stringify(nilai) }, { onConflict: 'key' });
-            } catch (e) { /* fallback offline */ }
-        }
-
-        async function ambilDariCloud(kunci) {
-            if (supabaseClient) {
-                try {
-                    const { data } = await supabaseClient.from('app_state').select('data_json').eq('key', kunci).single();
-                    if (data) {
-                        const parsed = JSON.parse(data.data_json);
-                        localStorage.setItem('akd_' + kunci, JSON.stringify(parsed));
-                        return parsed;
-                    }
-                } catch (e) { /* fallback ke lokal */ }
-            }
-            const lokal = localStorage.getItem('akd_' + kunci);
-            return lokal ? JSON.parse(lokal) : null;
-        }
-
         async function inisialisasiData() {
+            if (!supabaseClient) {
+                tampilToast('Gagal terhubung ke Database.', 'error');
+                return;
+            }
             tampilLoading(true);
             try {
-                const dataCloud = await ambilDariCloud('appState');
-                if (dataCloud && dataCloud.guru && dataCloud.guru.length > 0) {
-                    appState = { ...appState, ...dataCloud };
-                } else {
-                    buatDataDummy();
-                    await simpanKeCloud('appState', appState);
+                // 1. Ambil Pengaturan
+                const { data: set } = await supabaseClient.from('pengaturan').select('*').eq('id', 1).single();
+                if (set) {
+                    appState.pengaturan = {
+                        namaMadrasah: set.nama_madrasah,
+                        tahunAjaran: set.tahun_ajaran,
+                        jamMasuk: set.jam_masuk.substring(0, 5),
+                        jamPulang: set.jam_pulang.substring(0, 5),
+                        izinManual: set.izin_manual,
+                        passwordAdmin: set.password_admin,
+                        passwordGuru: set.password_guru,
+                        passwordMurid: set.password_murid
+                    };
                 }
+
+                // 2. Ambil Data Guru, Murid, dan Jadwal (Paralel untuk kecepatan)
+                const [resGuru, resMurid, resJadwal] = await Promise.all([
+                    supabaseClient.from('guru').select('*'),
+                    supabaseClient.from('murid').select('*'),
+                    supabaseClient.from('jadwal').select('*')
+                ]);
+
+                appState.guru = resGuru.data || [];
+                appState.murid = resMurid.data || [];
+                // Konversi guru_id dari SQL kembali menjadi properti 'guru' untuk frontend UI
+                appState.jadwal = (resJadwal.data || []).map(j => ({ ...j, guru: j.guru_id }));
+
+                // 3. Ambil Data Kehadiran (Batasi 30 hari terakhir agar cepat)
+                const d = new Date(); d.setDate(d.getDate() - 30);
+                const { data: resKehadiran } = await supabaseClient
+                    .from('kehadiran')
+                    .select('*')
+                    .gte('tanggal', d.toISOString().split('T')[0]);
+
+                appState.kehadiran = (resKehadiran || []).map(k => ({
+                    id: k.id, penggunaId: k.pengguna_id, nama: k.nama, role: k.role,
+                    tanggal: k.tanggal, jamMasuk: k.jam_masuk.substring(0, 5),
+                    jamPulang: k.jam_pulang ? k.jam_pulang.substring(0, 5) : null
+                }));
+
+                // 4. Ambil Catatan Harian
+                const { data: resCatatan } = await supabaseClient.from('catatan').select('*');
+                appState.catatan = {};
+                if (resCatatan) {
+                    resCatatan.forEach(c => {
+                        appState.catatan[`${c.guru_id}_${c.tanggal}`] = c.teks;
+                    });
+                }
+
             } catch (e) {
-                buatDataDummy();
+                console.error("Gagal memuat data:", e);
+                tampilToast('Terjadi kesalahan saat memuat data dari server.', 'error');
             }
             tampilLoading(false);
-        }
-
-        async function simpanState() {
-            await simpanKeCloud('appState', appState);
-        }
-
-        // ============================================================
-        // DATA DUMMY GENERATOR (DIKOSONGKAN UNTUK MULAI BERSIH)
-        // ============================================================
-        function buatDataDummy() {
-            appState.guru = [];
-            appState.murid = [];
-            appState.jadwal = [];
-            appState.kehadiran = [];
         }
 
         // ============================================================
@@ -2766,7 +2777,7 @@
             return `${Math.floor(menit / 60)}j ${menit % 60}m`;
         }
         function generateId(prefix) {
-            const num = String(Math.floor(Math.random() * 900) + 100);
+            const num = String(Math.floor(Math.random() * 90000) + 10000);
             return `${prefix}-${num}`;
         }
 
@@ -2834,73 +2845,32 @@
         // NAVIGASI & SIDEBAR
         // ============================================================
         const MENU_ADMIN = [
-            {
-                label: 'Utama', items: [
-                    { id: 'beranda-admin', ikon: '🏠', teks: 'Beranda' },
-                    { id: 'kehadiran-admin', ikon: '📋', teks: 'Kehadiran Hari Ini' },
-                    { id: 'laporan-admin', ikon: '📈', teks: 'Laporan' },
-                ]
-            },
-            {
-                label: 'Data', items: [
-                    { id: 'guru-admin', ikon: '👨‍🏫', teks: 'Data Guru' },
-                    { id: 'murid-admin', ikon: '👦', teks: 'Data Murid' },
-                    { id: 'jadwal-admin', ikon: '📅', teks: 'Jadwal' },
-                ]
-            },
-            {
-                label: 'Sistem', items: [
-                    { id: 'scan-guru', ikon: '📷', teks: 'Scan Kehadiran' },
-                    { id: 'pengaturan-admin', ikon: '⚙️', teks: 'Pengaturan' },
-                ]
-            },
+            { label: 'Utama', items: [{ id: 'beranda-admin', ikon: '🏠', teks: 'Beranda' }, { id: 'kehadiran-admin', ikon: '📋', teks: 'Kehadiran Hari Ini' }, { id: 'laporan-admin', ikon: '📈', teks: 'Laporan' }] },
+            { label: 'Data', items: [{ id: 'guru-admin', ikon: '👨‍🏫', teks: 'Data Guru' }, { id: 'murid-admin', ikon: '👦', teks: 'Data Murid' }, { id: 'jadwal-admin', ikon: '📅', teks: 'Jadwal' }] },
+            { label: 'Sistem', items: [{ id: 'scan-guru', ikon: '📷', teks: 'Scan Kehadiran' }, { id: 'pengaturan-admin', ikon: '⚙️', teks: 'Pengaturan' }] }
         ];
         const MENU_GURU = [
-            {
-                label: 'Utama', items: [
-                    { id: 'beranda-guru', ikon: '🏠', teks: 'Beranda' },
-                    { id: 'scan-guru', ikon: '📷', teks: 'Scan Kehadiran' },
-                    { id: 'id-guru', ikon: '🪪', teks: 'ID Digital' },
-                ]
-            },
-            {
-                label: 'Murid', items: [
-                    { id: 'dhabit-guru', ikon: '📊', teks: 'Dhabit Murid' },
-                ]
-            },
-            {
-                label: 'Personal', items: [
-                    { id: 'catatan-guru', ikon: '📝', teks: 'Catatan Harian' },
-                ]
-            },
+            { label: 'Utama', items: [{ id: 'beranda-guru', ikon: '🏠', teks: 'Beranda' }, { id: 'scan-guru', ikon: '📷', teks: 'Scan Kehadiran' }, { id: 'id-guru', ikon: '🪪', teks: 'ID Digital' }] },
+            { label: 'Murid', items: [{ id: 'dhabit-guru', ikon: '📊', teks: 'Dhabit Murid' }] },
+            { label: 'Personal', items: [{ id: 'catatan-guru', ikon: '📝', teks: 'Catatan Harian' }] }
         ];
         const MENU_MURID = [
-            {
-                label: 'Utama', items: [
-                    { id: 'beranda-murid', ikon: '🏠', teks: 'Beranda' },
-                    { id: 'kalender-murid', ikon: '📅', teks: 'Kehadiran Saya' },
-                ]
-            },
-            {
-                label: 'Akademik', items: [
-                    { id: 'tugas-murid', ikon: '📚', teks: 'Tugas & PR' },
-                    { id: 'prestasi-murid', ikon: '🏆', teks: 'Prestasi' },
-                ]
-            },
+            { label: 'Utama', items: [{ id: 'beranda-murid', ikon: '🏠', teks: 'Beranda' }, { id: 'kalender-murid', ikon: '📅', teks: 'Kehadiran Saya' }] },
+            { label: 'Akademik', items: [{ id: 'tugas-murid', ikon: '📚', teks: 'Tugas & PR' }, { id: 'prestasi-murid', ikon: '🏆', teks: 'Prestasi' }] }
         ];
 
         function setupSidebar() {
             const nav = document.getElementById('sidebar-nav');
             const menu = { admin: MENU_ADMIN, guru: MENU_GURU, murid: MENU_MURID }[pengguna.role];
             nav.innerHTML = menu.map(grup => `
-    <div class="nav-grup-label">${grup.label}</div>
-    ${grup.items.map(item => `
-      <div class="nav-item" id="nav-${item.id}" onclick="navigasiKe('${item.id}')">
-        <span class="nav-ikon">${item.ikon}</span>
-        <span>${item.teks}</span>
-      </div>
-    `).join('')}
-  `).join('');
+        <div class="nav-grup-label">${grup.label}</div>
+        ${grup.items.map(item => `
+        <div class="nav-item" id="nav-${item.id}" onclick="navigasiKe('${item.id}')">
+            <span class="nav-ikon">${item.ikon}</span>
+            <span>${item.teks}</span>
+        </div>
+        `).join('')}
+    `).join('');
         }
 
         function setupProfil() {
@@ -2910,21 +2880,16 @@
         }
 
         function navigasiKe(halamanId) {
-            // Sembunyikan semua halaman
             document.querySelectorAll('.halaman').forEach(h => h.classList.remove('aktif'));
             document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('aktif'));
-            // Tampilkan halaman yang dipilih
             const el = document.getElementById('halaman-' + halamanId);
             if (el) el.classList.add('aktif');
             const nav = document.getElementById('nav-' + halamanId);
             if (nav) nav.classList.add('aktif');
-            // Update topbar
             const allMenu = [...MENU_ADMIN, ...MENU_GURU, ...MENU_MURID].flatMap(g => g.items);
             const item = allMenu.find(i => i.id === halamanId);
             document.getElementById('topbar-halaman-aktif').textContent = item ? item.ikon + ' ' + item.teks : 'Beranda';
-            // Load konten halaman
             loadHalaman(halamanId);
-            // Tutup sidebar di mobile
             if (window.innerWidth <= 768) {
                 document.getElementById('sidebar').classList.remove('terbuka');
                 document.getElementById('overlay-sidebar').classList.remove('tampil');
@@ -2940,9 +2905,6 @@
             }
         }
 
-        // ============================================================
-        // LOAD KONTEN HALAMAN
-        // ============================================================
         function loadHalaman(id) {
             switch (id) {
                 case 'beranda-admin': loadBerandaAdmin(); break;
@@ -2979,31 +2941,13 @@
             const absen = (guru + murid) - hadirGuru - hadirMurid;
 
             document.getElementById('grid-statistik-admin').innerHTML = `
-    <div class="kartu-stat stat-biru animasi-masuk">
-      <div class="kartu-stat-ikon">👨‍🏫</div>
-      <div class="kartu-stat-nilai">${guru}</div>
-      <div class="kartu-stat-label">Total Guru</div>
-    </div>
-    <div class="kartu-stat stat-ungu animasi-masuk" style="animation-delay:.05s">
-      <div class="kartu-stat-ikon">🎓</div>
-      <div class="kartu-stat-nilai">${murid}</div>
-      <div class="kartu-stat-label">Total Santri</div>
-    </div>
-    <div class="kartu-stat stat-hijau animasi-masuk" style="animation-delay:.1s">
-      <div class="kartu-stat-ikon">✅</div>
-      <div class="kartu-stat-nilai">${hadirGuru + hadirMurid}</div>
-      <div class="kartu-stat-label">Hadir Hari Ini</div>
-    </div>
-    <div class="kartu-stat stat-merah animasi-masuk" style="animation-delay:.15s">
-      <div class="kartu-stat-ikon">❌</div>
-      <div class="kartu-stat-nilai">${absen}</div>
-      <div class="kartu-stat-label">Belum Hadir</div>
-    </div>
-  `;
+        <div class="kartu-stat stat-biru animasi-masuk"><div class="kartu-stat-ikon">👨‍🏫</div><div class="kartu-stat-nilai">${guru}</div><div class="kartu-stat-label">Total Guru</div></div>
+        <div class="kartu-stat stat-ungu animasi-masuk" style="animation-delay:.05s"><div class="kartu-stat-ikon">🎓</div><div class="kartu-stat-nilai">${murid}</div><div class="kartu-stat-label">Total Santri</div></div>
+        <div class="kartu-stat stat-hijau animasi-masuk" style="animation-delay:.1s"><div class="kartu-stat-ikon">✅</div><div class="kartu-stat-nilai">${hadirGuru + hadirMurid}</div><div class="kartu-stat-label">Hadir Hari Ini</div></div>
+        <div class="kartu-stat stat-merah animasi-masuk" style="animation-delay:.15s"><div class="kartu-stat-ikon">❌</div><div class="kartu-stat-nilai">${absen}</div><div class="kartu-stat-label">Belum Hadir</div></div>
+    `;
 
-            // Chart 7 hari
-            const hariBulan = [];
-            const nilaiHari = [];
+            const hariBulan = []; const nilaiHari = [];
             for (let i = 6; i >= 0; i--) {
                 const t = new Date(); t.setDate(t.getDate() - i);
                 if (t.getDay() === 0 || t.getDay() === 6) continue;
@@ -3012,63 +2956,53 @@
                 nilaiHari.push(appState.kehadiran.filter(k => k.tanggal === ts).length);
             }
             const maks = Math.max(...nilaiHari, 1);
-            document.getElementById('chart-7-hari').innerHTML = nilaiHari.map((n, i) => `
-    <div class="chart-kolom">
-      <div class="chart-bar-visual" style="height:${Math.max(10, (n / maks) * 100)}%">
-        <div class="chart-bar-nilai">${n}</div>
-      </div>
-    </div>
-  `).join('');
-            document.getElementById('chart-label-7-hari').innerHTML = hariBulan.map(h =>
-                `<div style="font-size:10px;color:var(--teks-redup);text-align:center;flex:1">${h}</div>`
-            ).join('');
+            document.getElementById('chart-7-hari').innerHTML = nilaiHari.map(n => `
+        <div class="chart-kolom">
+            <div class="chart-bar-visual" style="height:${Math.max(10, (n / maks) * 100)}%"><div class="chart-bar-nilai">${n}</div></div>
+        </div>
+    `).join('');
+            document.getElementById('chart-label-7-hari').innerHTML = hariBulan.map(h => `<div style="font-size:10px;color:var(--teks-redup);text-align:center;flex:1">${h}</div>`).join('');
 
-            // Live monitor mini
             const hadirHariIni = appState.kehadiran.filter(k => k.tanggal === tgl).slice(-5).reverse();
             if (hadirHariIni.length === 0) {
                 document.getElementById('live-monitor-mini').innerHTML = `<div class="empty-state"><div class="empty-state-ikon">📋</div><div class="empty-state-teks">Belum ada kehadiran hari ini</div></div>`;
             } else {
                 document.getElementById('live-monitor-mini').innerHTML = `
-      <table class="tabel-data">
-        <thead><tr><th>Nama</th><th>Masuk</th><th>Status</th></tr></thead>
-        <tbody>
-          ${hadirHariIni.map(k => `
-            <tr>
-              <td>${k.nama}</td>
-              <td><span class="badge badge-emas">${k.jamMasuk}</span></td>
-              <td><span class="badge ${k.role === 'guru' ? 'badge-biru' : 'badge-hijau'}">${k.role === 'guru' ? 'Guru' : 'Santri'}</span></td>
-            </tr>
-          `).join('')}
-        </tbody>
-      </table>
-    `;
+            <table class="tabel-data">
+                <thead><tr><th>Nama</th><th>Masuk</th><th>Status</th></tr></thead>
+                <tbody>
+                    ${hadirHariIni.map(k => `
+                    <tr>
+                        <td>${k.nama}</td>
+                        <td><span class="badge badge-emas">${k.jamMasuk}</span></td>
+                        <td><span class="badge ${k.role === 'guru' ? 'badge-biru' : 'badge-hijau'}">${k.role === 'guru' ? 'Guru' : 'Santri'}</span></td>
+                    </tr>`).join('')}
+                </tbody>
+            </table>
+        `;
             }
 
-            // Feed aktivitas
             const aktivitas = appState.kehadiran.slice(-8).reverse();
             document.getElementById('feed-aktivitas').innerHTML = aktivitas.length ? aktivitas.map(k => `
-    <div class="feed-item">
-      <div class="feed-ikon" style="background:${k.role === 'guru' ? 'rgba(52,152,219,0.1)' : 'rgba(46,204,113,0.1)'}">
-        ${k.role === 'guru' ? '👨‍🏫' : '📖'}
-      </div>
-      <div class="feed-konten">
-        <div class="feed-nama">${k.nama}</div>
-        <div class="feed-aksi">${k.jamPulang ? 'Telah pulang' : 'Hadir — Jam Masuk'}: ${k.jamMasuk}</div>
-        <div class="feed-waktu">${k.tanggal}</div>
-      </div>
-    </div>
-  `).join('') : '<div class="empty-state"><div class="empty-state-teks">Belum ada aktivitas</div></div>';
+        <div class="feed-item">
+            <div class="feed-ikon" style="background:${k.role === 'guru' ? 'rgba(52,152,219,0.1)' : 'rgba(46,204,113,0.1)'}">${k.role === 'guru' ? '👨‍🏫' : '📖'}</div>
+            <div class="feed-konten">
+                <div class="feed-nama">${k.nama}</div>
+                <div class="feed-aksi">${k.jamPulang ? 'Telah pulang' : 'Hadir — Jam Masuk'}: ${k.jamMasuk}</div>
+                <div class="feed-waktu">${k.tanggal}</div>
+            </div>
+        </div>
+    `).join('') : '<div class="empty-state"><div class="empty-state-teks">Belum ada aktivitas</div></div>';
         }
 
         // ============================================================
-        // KEHADIRAN HARI INI
+        // KEHADIRAN & LAPORAN ADMIN
         // ============================================================
         function loadKehadiranAdmin() {
             const tgl = formatTanggal();
             document.getElementById('subjudul-kehadiran-admin').textContent = namaHari();
             renderTabelKehadiran(tgl);
         }
-
         function renderTabelKehadiran(tgl, filter = '') {
             const semua = [...appState.guru, ...appState.murid];
             let rows = semua.filter(o => !filter || o.nama.toLowerCase().includes(filter.toLowerCase()));
@@ -3076,27 +3010,20 @@
             tbody.innerHTML = rows.map(orang => {
                 const k = appState.kehadiran.find(x => x.tanggal === tgl && x.penggunaId === orang.id);
                 return `<tr>
-      <td>${orang.nama}</td>
-      <td><code style="font-size:11px;color:var(--emas)">${orang.id}</code></td>
-      <td><span class="badge ${orang.id.startsWith('SANTRI') ? 'badge-hijau' : 'badge-biru'}">${orang.id.startsWith('SANTRI') ? 'Santri' : 'Guru'}</span></td>
-      <td>${k ? `<span class="badge badge-emas">${k.jamMasuk}</span>` : '<span class="badge badge-abu">—</span>'}</td>
-      <td>${k?.jamPulang ? `<span class="badge badge-biru">${k.jamPulang}</span>` : '<span class="badge badge-abu">—</span>'}</td>
-      <td>${k ? hitungDurasi(k.jamMasuk, k.jamPulang) : '—'}</td>
-      <td><span class="badge ${k ? 'badge-hijau' : 'badge-merah'}">${k ? '✅ Hadir' : '❌ Absen'}</span></td>
-    </tr>`;
+            <td>${orang.nama}</td>
+            <td><code style="font-size:11px;color:var(--emas)">${orang.id}</code></td>
+            <td><span class="badge ${orang.id.startsWith('SANTRI') ? 'badge-hijau' : 'badge-biru'}">${orang.id.startsWith('SANTRI') ? 'Santri' : 'Guru'}</span></td>
+            <td>${k ? `<span class="badge badge-emas">${k.jamMasuk}</span>` : '<span class="badge badge-abu">—</span>'}</td>
+            <td>${k?.jamPulang ? `<span class="badge badge-biru">${k.jamPulang}</span>` : '<span class="badge badge-abu">—</span>'}</td>
+            <td>${k ? hitungDurasi(k.jamMasuk, k.jamPulang) : '—'}</td>
+            <td><span class="badge ${k ? 'badge-hijau' : 'badge-merah'}">${k ? '✅ Hadir' : '❌ Absen'}</span></td>
+        </tr>`;
             }).join('');
         }
+        function filterTabelKehadiran() { renderTabelKehadiran(formatTanggal(), document.getElementById('cari-kehadiran').value); }
 
-        function filterTabelKehadiran() {
-            renderTabelKehadiran(formatTanggal(), document.getElementById('cari-kehadiran').value);
-        }
-
-        // ============================================================
-        // LAPORAN
-        // ============================================================
         function loadLaporanAdmin() {
             const semua = [...appState.guru, ...appState.murid];
-            // Hitung tanggal kerja 14 hari ke belakang
             const tglKerja = [];
             for (let i = 13; i >= 0; i--) {
                 const t = new Date(); t.setDate(t.getDate() - i);
@@ -3113,38 +3040,18 @@
                 const persen = Math.round((hadirArr.length / tglKerja.length) * 100);
                 const warnaP = persen >= 80 ? 'badge-hijau' : persen >= 60 ? 'badge-kuning' : 'badge-merah';
                 return `<tr>
-      <td>${orang.nama}</td>
-      <td><span class="badge ${orang.id.startsWith('SANTRI') ? 'badge-hijau' : 'badge-biru'}">${orang.id.startsWith('SANTRI') ? 'Santri' : 'Guru'}</span></td>
-      <td><strong>${hadirArr.length}</strong>/${tglKerja.length}</td>
-      <td>${terlambat}</td>
-      <td>${absen}</td>
-      <td><span class="badge ${warnaP}">${persen}%</span></td>
-    </tr>`;
+            <td>${orang.nama}</td>
+            <td><span class="badge ${orang.id.startsWith('SANTRI') ? 'badge-hijau' : 'badge-biru'}">${orang.id.startsWith('SANTRI') ? 'Santri' : 'Guru'}</span></td>
+            <td><strong>${hadirArr.length}</strong>/${tglKerja.length}</td>
+            <td>${terlambat}</td>
+            <td>${absen}</td>
+            <td><span class="badge ${warnaP}">${persen}%</span></td>
+        </tr>`;
             }).join('');
         }
 
-        function cetakLaporan() { window.print(); tampilToast('Membuka dialog cetak...', 'info'); }
-        function eksporCSV() {
-            const semua = [...appState.guru, ...appState.murid];
-            const tglKerja = [];
-            for (let i = 13; i >= 0; i--) {
-                const t = new Date(); t.setDate(t.getDate() - i);
-                if (t.getDay() !== 0 && t.getDay() !== 6) tglKerja.push(formatTanggal(t));
-            }
-            let csv = 'Nama,Role,Hadir,Absen,Persen\n';
-            semua.forEach(orang => {
-                const hadir = tglKerja.filter(tgl => appState.kehadiran.find(k => k.tanggal === tgl && k.penggunaId === orang.id)).length;
-                const persen = Math.round((hadir / tglKerja.length) * 100);
-                csv += `${orang.nama},${orang.id.startsWith('SANTRI') ? 'Santri' : 'Guru'},${hadir},${tglKerja.length - hadir},${persen}%\n`;
-            });
-            const blob = new Blob([csv], { type: 'text/csv' });
-            const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
-            a.download = `laporan-kehadiran-${formatTanggal()}.csv`; a.click();
-            tampilToast('File CSV berhasil diunduh!', 'sukses');
-        }
-
         // ============================================================
-        // DATA GURU
+        // DATA GURU (DENGAN SQL INSERT & DELETE)
         // ============================================================
         function loadDataGuru() {
             document.getElementById('subjudul-guru-count').textContent = `${appState.guru.length} guru terdaftar`;
@@ -3153,42 +3060,39 @@
         function renderTabelGuru(filter = '') {
             const data = appState.guru.filter(g => !filter || g.nama.toLowerCase().includes(filter.toLowerCase()));
             document.getElementById('tbody-guru').innerHTML = data.map(g => `
-    <tr>
-      <td><code style="color:var(--emas);font-size:12px">${g.id}</code></td>
-      <td><strong>${g.nama}</strong></td>
-      <td>${g.mapel}</td>
-      <td>${g.hp}</td>
-      <td><span class="badge badge-hijau">${g.status}</span></td>
-      <td>
-        <div style="display:flex;gap:4px">
-          <button class="btn btn-outline btn-sm" onclick="cetakQRGuru('${g.id}')">🖨️ QR</button>
-          <button class="btn btn-bahaya btn-sm" onclick="hapusGuru('${g.id}')">🗑️</button>
-        </div>
-      </td>
-    </tr>
-  `).join('') || '<tr><td colspan="6" style="text-align:center;color:var(--teks-redup)">Tidak ada data</td></tr>';
+        <tr>
+            <td><code style="color:var(--emas);font-size:12px">${g.id}</code></td>
+            <td><strong>${g.nama}</strong></td>
+            <td>${g.mapel}</td>
+            <td>${g.hp}</td>
+            <td><span class="badge badge-hijau">${g.status}</span></td>
+            <td>
+                <div style="display:flex;gap:4px">
+                    <button class="btn btn-outline btn-sm" onclick="cetakQRGuru('${g.id}')">🖨️ QR</button>
+                    <button class="btn btn-bahaya btn-sm" onclick="hapusGuru('${g.id}')">🗑️</button>
+                </div>
+            </td>
+        </tr>
+    `).join('') || '<tr><td colspan="6" style="text-align:center;color:var(--teks-redup)">Tidak ada data</td></tr>';
         }
         function filterTabelGuru() { renderTabelGuru(document.getElementById('cari-guru').value); }
 
         function bukaModalTambahGuru() {
             document.getElementById('judul-modal-utama').textContent = '➕ Tambah Guru Baru';
             document.getElementById('isi-modal-utama').innerHTML = `
-    <div class="form-pengaturan">
-      <div><label class="form-label">Nama Lengkap</label>
-        <input type="text" class="form-input-pengaturan" id="modal-guru-nama" placeholder="Nama lengkap guru"></div>
-      <div><label class="form-label">Mata Pelajaran</label>
-        <input type="text" class="form-input-pengaturan" id="modal-guru-mapel" placeholder="Tahfidz, Bahasa Arab, dll"></div>
-      <div><label class="form-label">Nomor HP</label>
-        <input type="text" class="form-input-pengaturan" id="modal-guru-hp" placeholder="0812-xxxx-xxxx"></div>
-      <div><label class="form-label">Prefix ID</label>
-        <select class="form-select-pengaturan" id="modal-guru-prefix">
-          <option value="MUADDIB">MUADDIB (Ustadz Laki-laki)</option>
-          <option value="MUADIBBAH">MUADIBBAH (Ustadzah Perempuan)</option>
-        </select>
-      </div>
-      <button class="btn btn-primer" style="width:100%" onclick="simpanGuruBaru()">💾 Simpan Guru</button>
-    </div>
-  `;
+        <div class="form-pengaturan">
+            <div><label class="form-label">Nama Lengkap</label><input type="text" class="form-input-pengaturan" id="modal-guru-nama" placeholder="Nama lengkap guru"></div>
+            <div><label class="form-label">Mata Pelajaran</label><input type="text" class="form-input-pengaturan" id="modal-guru-mapel" placeholder="Tahfidz, Bahasa Arab, dll"></div>
+            <div><label class="form-label">Nomor HP</label><input type="text" class="form-input-pengaturan" id="modal-guru-hp" placeholder="0812-xxxx-xxxx"></div>
+            <div><label class="form-label">Prefix ID</label>
+                <select class="form-select-pengaturan" id="modal-guru-prefix">
+                    <option value="MUADDIB">MUADDIB (Ustadz Laki-laki)</option>
+                    <option value="MUADIBBAH">MUADIBBAH (Ustadzah Perempuan)</option>
+                </select>
+            </div>
+            <button class="btn btn-primer" style="width:100%" onclick="simpanGuruBaru()">💾 Simpan Guru</button>
+        </div>
+    `;
             bukaModalUtama();
         }
 
@@ -3197,46 +3101,59 @@
             const mapel = document.getElementById('modal-guru-mapel').value.trim();
             const hp = document.getElementById('modal-guru-hp').value.trim();
             const prefix = document.getElementById('modal-guru-prefix').value;
+
             if (!nama) { tampilToast('Nama tidak boleh kosong!', 'error'); return; }
+
             const idBaru = generateId(prefix);
-            appState.guru.push({ id: idBaru, nama, mapel, hp: hp || '-', status: 'Aktif', password: appState.pengaturan.passwordGuru });
-            await simpanState();
+            const dataBaru = { id: idBaru, nama, mapel, hp: hp || '-', status: 'Aktif', password: appState.pengaturan.passwordGuru };
+
+            // 1. Simpan ke Supabase DB
+            const { error } = await supabaseClient.from('guru').insert([dataBaru]);
+            if (error) {
+                console.error(error);
+                tampilToast('Gagal menyimpan guru ke Database.', 'error');
+                return;
+            }
+
+            // 2. Update UI
+            appState.guru.push(dataBaru);
             tutupModalUtama();
             loadDataGuru();
-            tampilToast(`Guru ${nama} berhasil ditambahkan! ID: ${idBaru}`, 'sukses');
+            tampilToast(`Guru ${nama} berhasil ditambahkan!`, 'sukses');
         }
 
         async function hapusGuru(id) {
             if (!confirm(`Yakin hapus guru dengan ID ${id}?`)) return;
+
+            const { error } = await supabaseClient.from('guru').delete().eq('id', id);
+            if (error) {
+                tampilToast('Gagal menghapus data dari Database.', 'error');
+                return;
+            }
+
             appState.guru = appState.guru.filter(g => g.id !== id);
-            await simpanState();
             loadDataGuru();
             tampilToast('Data guru berhasil dihapus.', 'info');
         }
 
-        // FUNGSI INI TELAH DIPERBARUI MENGGUNAKAN IMAGE API
         function cetakQRGuru(id) {
             const guru = appState.guru.find(g => g.id === id);
             if (!guru) return;
             document.getElementById('judul-modal-utama').textContent = '🖨️ QR Code Guru — ' + guru.nama;
+            // PERBAIKAN: Ubah resolusi QR menjadi 400x400 untuk ketajaman
             document.getElementById('isi-modal-utama').innerHTML = `
-    <div style="text-align:center;padding:10px">
-      <div style="margin-bottom:10px;font-size:13px;color:var(--teks-sekunder)">ID: <strong style="color:var(--emas)">${guru.id}</strong></div>
-      
-      <!-- Menggunakan Image API agar 100% muncul -->
-      <img src="https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${guru.id}&color=0d3b2e&bgcolor=fdf6e3" style="border-radius:8px; width:200px; height:200px; margin: 0 auto; display: block;" alt="QR Code">
-      
-      <div style="margin-top:10px;font-size:12px;color:var(--teks-sekunder)">Scan untuk mencatat kehadiran ${guru.nama}</div>
-      
-      <!-- Fix untuk fungsi unduh (Membuka gambar HD di tab baru) -->
-      <button class="btn btn-emas" style="margin-top:12px;width:100%" onclick="window.open('https://api.qrserver.com/v1/create-qr-code/?size=500x500&data=${guru.id}&color=0d3b2e&bgcolor=fdf6e3', '_blank')">📥 Buka & Unduh QR HD</button>
-    </div>
-  `;
+        <div style="text-align:center;padding:10px">
+            <div style="margin-bottom:10px;font-size:13px;color:var(--teks-sekunder)">ID: <strong style="color:var(--emas)">${guru.id}</strong></div>
+            <img src="https://api.qrserver.com/v1/create-qr-code/?size=400x400&data=${guru.id}&color=000000&bgcolor=ffffff" style="border-radius:8px; width:200px; height:200px; margin: 0 auto; display: block;" alt="QR Code">
+            <div style="margin-top:10px;font-size:12px;color:var(--teks-sekunder)">Scan untuk mencatat kehadiran ${guru.nama}</div>
+            <button class="btn btn-emas" style="margin-top:12px;width:100%" onclick="window.open('https://api.qrserver.com/v1/create-qr-code/?size=500x500&data=${guru.id}&color=000000&bgcolor=ffffff', '_blank')">📥 Buka & Unduh QR HD</button>
+        </div>
+    `;
             bukaModalUtama();
         }
 
         // ============================================================
-        // DATA MURID
+        // DATA MURID (DENGAN SQL INSERT & DELETE)
         // ============================================================
         function loadDataMurid() {
             document.getElementById('subjudul-murid-count').textContent = `${appState.murid.length} santri terdaftar`;
@@ -3245,33 +3162,28 @@
         function renderTabelMurid(filter = '') {
             const data = appState.murid.filter(m => !filter || m.nama.toLowerCase().includes(filter.toLowerCase()));
             document.getElementById('tbody-murid').innerHTML = data.map(m => `
-    <tr>
-      <td><code style="color:var(--emas);font-size:12px">${m.id}</code></td>
-      <td><strong>${m.nama}</strong></td>
-      <td>${m.kelas}</td>
-      <td>${m.wali}</td>
-      <td><span class="badge badge-hijau">${m.status}</span></td>
-      <td>
-        <button class="btn btn-bahaya btn-sm" onclick="hapusMurid('${m.id}')">🗑️</button>
-      </td>
-    </tr>
-  `).join('') || '<tr><td colspan="6" style="text-align:center;color:var(--teks-redup)">Tidak ada data</td></tr>';
+        <tr>
+            <td><code style="color:var(--emas);font-size:12px">${m.id}</code></td>
+            <td><strong>${m.nama}</strong></td>
+            <td>${m.kelas}</td>
+            <td>${m.wali}</td>
+            <td><span class="badge badge-hijau">${m.status}</span></td>
+            <td><button class="btn btn-bahaya btn-sm" onclick="hapusMurid('${m.id}')">🗑️</button></td>
+        </tr>
+    `).join('') || '<tr><td colspan="6" style="text-align:center;color:var(--teks-redup)">Tidak ada data</td></tr>';
         }
         function filterTabelMurid() { renderTabelMurid(document.getElementById('cari-murid').value); }
 
         function bukaModalTambahMurid() {
             document.getElementById('judul-modal-utama').textContent = '➕ Tambah Santri Baru';
             document.getElementById('isi-modal-utama').innerHTML = `
-    <div class="form-pengaturan">
-      <div><label class="form-label">Nama Lengkap</label>
-        <input type="text" class="form-input-pengaturan" id="modal-murid-nama" placeholder="Nama santri"></div>
-      <div><label class="form-label">Kelas / Halaqah</label>
-        <input type="text" class="form-input-pengaturan" id="modal-murid-kelas" placeholder="Halaqah A / B / C"></div>
-      <div><label class="form-label">Nama Wali</label>
-        <input type="text" class="form-input-pengaturan" id="modal-murid-wali" placeholder="Nama wali murid"></div>
-      <button class="btn btn-primer" style="width:100%" onclick="simpanMuridBaru()">💾 Simpan Santri</button>
-    </div>
-  `;
+        <div class="form-pengaturan">
+            <div><label class="form-label">Nama Lengkap</label><input type="text" class="form-input-pengaturan" id="modal-murid-nama" placeholder="Nama santri"></div>
+            <div><label class="form-label">Kelas / Halaqah</label><input type="text" class="form-input-pengaturan" id="modal-murid-kelas" placeholder="Halaqah A / B / C"></div>
+            <div><label class="form-label">Nama Wali</label><input type="text" class="form-input-pengaturan" id="modal-murid-wali" placeholder="Nama wali murid"></div>
+            <button class="btn btn-primer" style="width:100%" onclick="simpanMuridBaru()">💾 Simpan Santri</button>
+        </div>
+    `;
             bukaModalUtama();
         }
 
@@ -3280,69 +3192,76 @@
             const kelas = document.getElementById('modal-murid-kelas').value.trim();
             const wali = document.getElementById('modal-murid-wali').value.trim();
             if (!nama) { tampilToast('Nama tidak boleh kosong!', 'error'); return; }
+
             const idBaru = generateId('SANTRI');
-            appState.murid.push({ id: idBaru, nama, kelas: kelas || 'Halaqah A', wali: wali || '-', status: 'Aktif', password: appState.pengaturan.passwordMurid });
-            await simpanState();
+            const dataBaru = { id: idBaru, nama, kelas: kelas || 'Halaqah A', wali: wali || '-', status: 'Aktif', password: appState.pengaturan.passwordMurid };
+
+            const { error } = await supabaseClient.from('murid').insert([dataBaru]);
+            if (error) {
+                tampilToast('Gagal menyimpan santri ke Database.', 'error');
+                return;
+            }
+
+            appState.murid.push(dataBaru);
             tutupModalUtama();
             loadDataMurid();
-            tampilToast(`Santri ${nama} berhasil ditambahkan! ID: ${idBaru}`, 'sukses');
+            tampilToast(`Santri ${nama} berhasil ditambahkan!`, 'sukses');
         }
 
         async function hapusMurid(id) {
             if (!confirm(`Yakin hapus santri dengan ID ${id}?`)) return;
+
+            const { error } = await supabaseClient.from('murid').delete().eq('id', id);
+            if (error) return tampilToast('Gagal menghapus data.', 'error');
+
             appState.murid = appState.murid.filter(m => m.id !== id);
-            await simpanState();
             loadDataMurid();
             tampilToast('Data santri berhasil dihapus.', 'info');
         }
 
         // ============================================================
-        // JADWAL
+        // JADWAL (DENGAN SQL INSERT & DELETE)
         // ============================================================
         function loadJadwalAdmin() {
             const hari = ['Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'];
-            const wrap = document.getElementById('jadwal-per-hari');
-            wrap.innerHTML = hari.map(h => {
+            document.getElementById('jadwal-per-hari').innerHTML = hari.map(h => {
                 const jadwalHari = appState.jadwal.filter(j => j.hari === h);
                 return `
-      <div class="kartu" style="margin-bottom:12px">
-        <div class="kartu-judul">📅 ${h}</div>
-        ${jadwalHari.length ? jadwalHari.map(j => `
-          <div class="jadwal-item">
-            <div class="jadwal-waktu">${j.jam}</div>
-            <div style="flex:1">
-              <div class="jadwal-mapel">${j.mapel}</div>
-              <div class="jadwal-kelas">Kelas: ${j.kelas} | ${(appState.guru.find(g => g.id === j.guru) || { nama: 'Tidak ada' }).nama}</div>
+            <div class="kartu" style="margin-bottom:12px">
+                <div class="kartu-judul">📅 ${h}</div>
+                ${jadwalHari.length ? jadwalHari.map(j => `
+                    <div class="jadwal-item">
+                        <div class="jadwal-waktu">${j.jam}</div>
+                        <div style="flex:1">
+                            <div class="jadwal-mapel">${j.mapel}</div>
+                            <div class="jadwal-kelas">Kelas: ${j.kelas} | ${(appState.guru.find(g => g.id === j.guru) || { nama: 'Tidak ada' }).nama}</div>
+                        </div>
+                        <button class="btn btn-bahaya btn-sm" onclick="hapusJadwal('${j.id}')">🗑️</button>
+                    </div>
+                `).join('') : '<div style="font-size:12px;color:var(--teks-redup);padding:8px 0">Tidak ada jadwal</div>'}
             </div>
-            <button class="btn btn-bahaya btn-sm" onclick="hapusJadwal('${j.id}')">🗑️</button>
-          </div>
-        `).join('') : '<div style="font-size:12px;color:var(--teks-redup);padding:8px 0">Tidak ada jadwal</div>'}
-      </div>
-    `;
+        `;
             }).join('');
         }
 
         function bukaModalTambahJadwal() {
             document.getElementById('judul-modal-utama').textContent = '➕ Tambah Jadwal';
             document.getElementById('isi-modal-utama').innerHTML = `
-    <div class="form-pengaturan">
-      <div><label class="form-label">Hari</label>
-        <select class="form-select-pengaturan" id="modal-jadwal-hari">
-          ${['Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'].map(h => `<option>${h}</option>`).join('')}
-        </select></div>
-      <div><label class="form-label">Jam (Format: HH:MM - HH:MM)</label>
-        <input type="text" class="form-input-pengaturan" id="modal-jadwal-jam" placeholder="07:00 - 08:30"></div>
-      <div><label class="form-label">Mata Pelajaran</label>
-        <input type="text" class="form-input-pengaturan" id="modal-jadwal-mapel" placeholder="Tahfidz, Tajwid, dll"></div>
-      <div><label class="form-label">Kelas</label>
-        <input type="text" class="form-input-pengaturan" id="modal-jadwal-kelas" placeholder="Halaqah A / Semua"></div>
-      <div><label class="form-label">Guru</label>
-        <select class="form-select-pengaturan" id="modal-jadwal-guru">
-          ${appState.guru.map(g => `<option value="${g.id}">${g.nama}</option>`).join('')}
-        </select></div>
-      <button class="btn btn-primer" style="width:100%" onclick="simpanJadwalBaru()">💾 Simpan Jadwal</button>
-    </div>
-  `;
+        <div class="form-pengaturan">
+            <div><label class="form-label">Hari</label>
+                <select class="form-select-pengaturan" id="modal-jadwal-hari">
+                    ${['Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'].map(h => `<option>${h}</option>`).join('')}
+                </select></div>
+            <div><label class="form-label">Jam (Format: HH:MM - HH:MM)</label><input type="text" class="form-input-pengaturan" id="modal-jadwal-jam" placeholder="07:00 - 08:30"></div>
+            <div><label class="form-label">Mata Pelajaran</label><input type="text" class="form-input-pengaturan" id="modal-jadwal-mapel" placeholder="Tahfidz, Tajwid, dll"></div>
+            <div><label class="form-label">Kelas</label><input type="text" class="form-input-pengaturan" id="modal-jadwal-kelas" placeholder="Halaqah A / Semua"></div>
+            <div><label class="form-label">Guru</label>
+                <select class="form-select-pengaturan" id="modal-jadwal-guru">
+                    ${appState.guru.map(g => `<option value="${g.id}">${g.nama}</option>`).join('')}
+                </select></div>
+            <button class="btn btn-primer" style="width:100%" onclick="simpanJadwalBaru()">💾 Simpan Jadwal</button>
+        </div>
+    `;
             bukaModalUtama();
         }
 
@@ -3351,24 +3270,31 @@
             const jam = document.getElementById('modal-jadwal-jam').value.trim();
             const mapel = document.getElementById('modal-jadwal-mapel').value.trim();
             const kelas = document.getElementById('modal-jadwal-kelas').value.trim();
-            const guru = document.getElementById('modal-jadwal-guru').value;
+            const guru_id = document.getElementById('modal-jadwal-guru').value;
             if (!jam || !mapel) { tampilToast('Jam dan mata pelajaran wajib diisi!', 'error'); return; }
-            appState.jadwal.push({ id: generateId('JDW'), hari, jam, mapel, kelas: kelas || 'Semua', guru });
-            await simpanState();
+
+            const dataBaru = { id: generateId('JDW'), hari, jam, mapel, kelas: kelas || 'Semua', guru_id };
+
+            const { error } = await supabaseClient.from('jadwal').insert([dataBaru]);
+            if (error) return tampilToast('Gagal menyimpan jadwal.', 'error');
+
+            appState.jadwal.push({ ...dataBaru, guru: guru_id });
             tutupModalUtama();
             loadJadwalAdmin();
             tampilToast('Jadwal berhasil ditambahkan!', 'sukses');
         }
 
         async function hapusJadwal(id) {
+            const { error } = await supabaseClient.from('jadwal').delete().eq('id', id);
+            if (error) return tampilToast('Gagal menghapus jadwal.', 'error');
+
             appState.jadwal = appState.jadwal.filter(j => j.id !== id);
-            await simpanState();
             loadJadwalAdmin();
             tampilToast('Jadwal dihapus.', 'info');
         }
 
         // ============================================================
-        // PENGATURAN ADMIN
+        // PENGATURAN ADMIN (DENGAN SQL UPDATE)
         // ============================================================
         function loadPengaturanAdmin() {
             document.getElementById('set-nama-madrasah').value = appState.pengaturan.namaMadrasah;
@@ -3379,12 +3305,23 @@
         }
 
         async function simpanPengaturan() {
-            appState.pengaturan.namaMadrasah = document.getElementById('set-nama-madrasah').value;
-            appState.pengaturan.tahunAjaran = document.getElementById('set-tahun-ajaran').value;
-            appState.pengaturan.jamMasuk = document.getElementById('set-jam-masuk').value;
-            appState.pengaturan.jamPulang = document.getElementById('set-jam-pulang').value;
-            appState.pengaturan.izinManual = document.getElementById('set-izin-manual').checked;
-            await simpanState();
+            const updateData = {
+                nama_madrasah: document.getElementById('set-nama-madrasah').value,
+                tahun_ajaran: document.getElementById('set-tahun-ajaran').value,
+                jam_masuk: document.getElementById('set-jam-masuk').value + ":00",
+                jam_pulang: document.getElementById('set-jam-pulang').value + ":00",
+                izin_manual: document.getElementById('set-izin-manual').checked
+            };
+
+            const { error } = await supabaseClient.from('pengaturan').update(updateData).eq('id', 1);
+            if (error) { console.error(error); return tampilToast('Gagal menyimpan pengaturan.', 'error'); }
+
+            appState.pengaturan = {
+                ...appState.pengaturan,
+                namaMadrasah: updateData.nama_madrasah, tahunAjaran: updateData.tahun_ajaran,
+                jamMasuk: updateData.jam_masuk.substring(0, 5), jamPulang: updateData.jam_pulang.substring(0, 5),
+                izinManual: updateData.izin_manual
+            };
             tampilToast('Pengaturan berhasil disimpan!', 'sukses');
         }
 
@@ -3392,29 +3329,40 @@
             const pAdmin = document.getElementById('set-pw-admin').value;
             const pGuru = document.getElementById('set-pw-guru').value;
             const pMurid = document.getElementById('set-pw-murid').value;
+
+            const updateData = {};
+            if (pAdmin) updateData.password_admin = pAdmin;
+            if (pGuru) updateData.password_guru = pGuru;
+            if (pMurid) updateData.password_murid = pMurid;
+
+            if (Object.keys(updateData).length === 0) return;
+
+            const { error } = await supabaseClient.from('pengaturan').update(updateData).eq('id', 1);
+            if (error) return tampilToast('Gagal update password.', 'error');
+
             if (pAdmin) appState.pengaturan.passwordAdmin = pAdmin;
             if (pGuru) appState.pengaturan.passwordGuru = pGuru;
             if (pMurid) appState.pengaturan.passwordMurid = pMurid;
-            await simpanState();
+
             document.getElementById('set-pw-admin').value = '';
             document.getElementById('set-pw-guru').value = '';
             document.getElementById('set-pw-murid').value = '';
-            tampilToast('Password berhasil diperbarui!', 'sukses');
+            tampilToast('Password default berhasil diperbarui!', 'sukses');
         }
 
         function konfirmasiResetData() {
             document.getElementById('judul-modal-utama').textContent = '⚠️ Konfirmasi Reset Data';
             document.getElementById('isi-modal-utama').innerHTML = `
-    <p style="font-size:13px;color:var(--teks-sekunder);margin-bottom:16px">
-      Tindakan ini akan menghapus <strong style="color:#e74c3c">seluruh data guru, murid, jadwal, dan kehadiran</strong>. 
-      Data tidak dapat dipulihkan. Ketik <strong style="color:var(--emas)">RESET</strong> untuk melanjutkan.
-    </p>
-    <input type="text" class="form-input-pengaturan" id="konfirmasi-reset-input" placeholder="Ketik RESET untuk konfirmasi" style="margin-bottom:12px">
-    <div style="display:flex;gap:8px">
-      <button class="btn btn-bahaya" style="flex:1" onclick="prosesReset()">🗑️ Ya, Reset Semua Data</button>
-      <button class="btn btn-outline" style="flex:1" onclick="tutupModalUtama()">Batal</button>
-    </div>
-  `;
+        <p style="font-size:13px;color:var(--teks-sekunder);margin-bottom:16px">
+        Tindakan ini akan menghapus <strong style="color:#e74c3c">seluruh data</strong> di database server.<br>
+        Data tidak dapat dipulihkan. Ketik <strong style="color:var(--emas)">RESET</strong> untuk melanjutkan.
+        </p>
+        <input type="text" class="form-input-pengaturan" id="konfirmasi-reset-input" placeholder="Ketik RESET untuk konfirmasi" style="margin-bottom:12px">
+        <div style="display:flex;gap:8px">
+        <button class="btn btn-bahaya" style="flex:1" onclick="prosesReset()">🗑️ Ya, Reset Semua Data</button>
+        <button class="btn btn-outline" style="flex:1" onclick="tutupModalUtama()">Batal</button>
+        </div>
+    `;
             bukaModalUtama();
         }
 
@@ -3422,22 +3370,27 @@
             if (document.getElementById('konfirmasi-reset-input').value !== 'RESET') {
                 tampilToast('Ketik RESET untuk konfirmasi!', 'error'); return;
             }
-            appState.guru = []; appState.murid = []; appState.jadwal = []; appState.kehadiran = [];
-            buatDataDummy();
-            await simpanState();
+            await Promise.all([
+                supabaseClient.from('kehadiran').delete().neq('id', '0'),
+                supabaseClient.from('catatan').delete().neq('id', 0),
+                supabaseClient.from('jadwal').delete().neq('id', '0'),
+                supabaseClient.from('murid').delete().neq('id', '0'),
+                supabaseClient.from('guru').delete().neq('id', '0')
+            ]);
+
+            appState.guru = []; appState.murid = []; appState.jadwal = []; appState.kehadiran = []; appState.catatan = {};
             tutupModalUtama();
-            tampilToast('Data berhasil direset dengan data dummy.', 'info');
+            tampilToast('Semua Data berhasil direset dari server.', 'info');
             loadBerandaAdmin();
         }
 
         // ============================================================
-        // BERANDA GURU
+        // BERANDA GURU & GANTI PASSWORD
         // ============================================================
         function loadBerandaGuru() {
             document.getElementById('teks-sapaan-guru').innerHTML = `${sapaaWaktu()}, <span>${pengguna.nama.split(' ')[0]}</span>!`;
             document.getElementById('teks-tanggal-guru').textContent = namaHari();
 
-            // Status kehadiran
             const hariIni = formatTanggal();
             const kehadiran = appState.kehadiran.find(k => k.tanggal === hariIni && k.penggunaId === pengguna.id);
             const statusEl = document.getElementById('status-kehadiran-guru');
@@ -3449,107 +3402,124 @@
                 statusEl.textContent = '⏳ Belum Absen Hari Ini';
             }
 
-            // Jadwal hari ini
-            const hariEn = hariInggris();
             const hariIdMap = { Monday: 'Senin', Tuesday: 'Selasa', Wednesday: 'Rabu', Thursday: 'Kamis', Friday: 'Jumat', Saturday: 'Sabtu', Sunday: 'Ahad' };
-            const hariId = hariIdMap[hariEn] || '';
+            const hariId = hariIdMap[hariInggris()] || '';
             const jadwalHariIni = appState.jadwal.filter(j => j.hari === hariId && j.guru === pengguna.id);
+
             document.getElementById('jadwal-guru-hari-ini').innerHTML = jadwalHariIni.length ?
                 jadwalHariIni.map(j => `
-      <div class="jadwal-item">
-        <div class="jadwal-waktu">${j.jam}</div>
-        <div><div class="jadwal-mapel">${j.mapel}</div><div class="jadwal-kelas">Kelas: ${j.kelas}</div></div>
-      </div>
-    `).join('') :
-                `<div class="empty-state"><div class="empty-state-ikon">📅</div><div class="empty-state-teks">Tidak ada jadwal hari ini</div></div>`;
+            <div class="jadwal-item">
+                <div class="jadwal-waktu">${j.jam}</div>
+                <div><div class="jadwal-mapel">${j.mapel}</div><div class="jadwal-kelas">Kelas: ${j.kelas}</div></div>
+            </div>
+        `).join('') : `<div class="empty-state"><div class="empty-state-ikon">📅</div><div class="empty-state-teks">Tidak ada jadwal hari ini</div></div>`;
         }
 
         async function gantiPasswordGuru() {
             const pwLama = document.getElementById('guru-pw-lama').value;
             const pwBaru = document.getElementById('guru-pw-baru').value;
 
-            if (!pwLama || !pwBaru) {
-                tampilToast('Password lama dan baru harus diisi!', 'error');
-                return;
-            }
+            if (!pwLama || !pwBaru) return tampilToast('Password lama dan baru harus diisi!', 'error');
 
             const currentPw = pengguna.data.password || appState.pengaturan.passwordGuru;
-            if (pwLama !== currentPw) {
-                tampilToast('Password lama salah!', 'error');
-                return;
-            }
+            if (pwLama !== currentPw) return tampilToast('Password lama salah!', 'error');
+
+            const { error } = await supabaseClient.from('guru').update({ password: pwBaru }).eq('id', pengguna.id);
+            if (error) return tampilToast('Gagal update password di server.', 'error');
 
             const guruIndex = appState.guru.findIndex(g => g.id === pengguna.id);
-            if (guruIndex !== -1) {
-                appState.guru[guruIndex].password = pwBaru;
-                pengguna.data.password = pwBaru; // Update session
-                await simpanState();
-                tampilToast('Password berhasil diperbarui!', 'sukses');
-                document.getElementById('guru-pw-lama').value = '';
-                document.getElementById('guru-pw-baru').value = '';
-            }
+            if (guruIndex !== -1) appState.guru[guruIndex].password = pwBaru;
+            pengguna.data.password = pwBaru;
+
+            tampilToast('Password berhasil diperbarui!', 'sukses');
+            document.getElementById('guru-pw-lama').value = '';
+            document.getElementById('guru-pw-baru').value = '';
         }
 
         // ============================================================
-        // SCAN KEHADIRAN (digunakan guru dan admin mode scan)
+        // SCAN KEHADIRAN & PROSES INSERT/UPDATE SQL (DIPERBAIKI)
         // ============================================================
         function loadScanGuru() {
-            // Sembunyikan bagian Input Manual apabila user yang login adalah guru
             const inputManual = document.getElementById('kartu-input-manual');
-            if (inputManual) {
-                inputManual.style.display = (pengguna.role === 'admin') ? 'block' : 'none';
-            }
+            if (inputManual) inputManual.style.display = (pengguna.role === 'admin') ? 'block' : 'none';
             renderLogScan();
         }
 
         function mulaiKamera() {
-            if (!navigator.mediaDevices?.getUserMedia) {
-                tampilToast('Kamera tidak didukung di browser ini.', 'error'); return;
-            }
-            navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } })
+            if (!navigator.mediaDevices?.getUserMedia) return tampilToast('Kamera tidak didukung di browser ini.', 'error');
+
+            // PERBAIKAN: Memaksa browser meminta resolusi kamera tinggi (HD)
+            const constraints = {
+                video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } }
+            };
+
+            navigator.mediaDevices.getUserMedia(constraints)
+                .catch(() => navigator.mediaDevices.getUserMedia({ video: true }))
                 .then(stream => {
                     streamKamera = stream;
                     const video = document.getElementById('video-kamera');
                     video.srcObject = stream;
                     document.getElementById('btn-mulai-kamera').disabled = true;
                     document.getElementById('btn-henti-kamera').disabled = false;
-                    intervalScan = setInterval(scanFrame, 300);
+
+                    // PERBAIKAN: Gunakan requestAnimationFrame menggantikan setInterval
+                    video.onloadedmetadata = () => {
+                        video.play();
+                        isScanningKamera = true;
+                        requestAnimationFrame(scanFrame);
+                    };
                     tampilToast('Kamera aktif. Arahkan QR Code!', 'sukses');
-                })
-                .catch(() => tampilToast('Gagal mengakses kamera. Coba input manual.', 'error'));
+                }).catch(() => tampilToast('Gagal mengakses kamera. Coba input manual.', 'error'));
         }
 
         function hentiKamera() {
+            isScanningKamera = false; // PERBAIKAN: Stop frame loop
             if (streamKamera) { streamKamera.getTracks().forEach(t => t.stop()); streamKamera = null; }
-            clearInterval(intervalScan);
-            const btn1 = document.getElementById('btn-mulai-kamera');
-            const btn2 = document.getElementById('btn-henti-kamera');
-            if (btn1) btn1.disabled = false;
-            if (btn2) btn2.disabled = true;
+            if (document.getElementById('btn-mulai-kamera')) document.getElementById('btn-mulai-kamera').disabled = false;
+            if (document.getElementById('btn-henti-kamera')) document.getElementById('btn-henti-kamera').disabled = true;
         }
 
         function scanFrame() {
+            if (!isScanningKamera) return; // Keluar jika kamera dihentikan
+
             const video = document.getElementById('video-kamera');
             const canvas = document.getElementById('canvas-kamera');
-            if (!video || video.readyState !== video.HAVE_ENOUGH_DATA) return;
-            canvas.height = video.videoHeight;
-            canvas.width = video.videoWidth;
-            const ctx = canvas.getContext('2d');
-            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-            const img = ctx.getImageData(0, 0, canvas.width, canvas.height);
-            if (typeof jsQR !== 'undefined') {
-                const code = jsQR(img.data, img.width, img.height);
-                if (code) {
-                    clearInterval(intervalScan);
-                    prosesHasilScan(code.data);
-                    setTimeout(() => { if (streamKamera) intervalScan = setInterval(scanFrame, 300); }, 3000);
+
+            if (video && video.readyState === video.HAVE_ENOUGH_DATA) {
+                canvas.height = video.videoHeight;
+                canvas.width = video.videoWidth;
+
+                // PERBAIKAN: Tambah willReadFrequently untuk optimasi canvas
+                const ctx = canvas.getContext('2d', { willReadFrequently: true });
+                ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+                const img = ctx.getImageData(0, 0, canvas.width, canvas.height);
+
+                if (typeof jsQR !== 'undefined') {
+                    // PERBAIKAN: Parameter inversionAttempts untuk QR Code yang agak blur / kontras jelek
+                    const code = jsQR(img.data, img.width, img.height, { inversionAttempts: "attemptBoth" });
+
+                    if (code && code.data) {
+                        isScanningKamera = false; // Jeda pemindaian sejenak
+                        prosesHasilScan(code.data.trim().toUpperCase());
+
+                        // Lanjut scan lagi setelah 3 detik
+                        setTimeout(() => {
+                            if (streamKamera) {
+                                isScanningKamera = true;
+                                requestAnimationFrame(scanFrame);
+                            }
+                        }, 3000);
+                        return; // Keluar fungsi agar frame tidak di-request ganda
+                    }
                 }
             }
+            // Loop secara efisien mengikuti refresh rate layar
+            requestAnimationFrame(scanFrame);
         }
 
         function prosesManualScan() {
             const id = document.getElementById('input-manual-id').value.trim().toUpperCase();
-            if (!id) { tampilToast('Masukkan ID terlebih dahulu!', 'error'); return; }
+            if (!id) return tampilToast('Masukkan ID terlebih dahulu!', 'error');
             prosesHasilScan(id);
             document.getElementById('input-manual-id').value = '';
         }
@@ -3557,7 +3527,7 @@
         async function prosesHasilScan(id) {
             const semua = [...appState.guru, ...appState.murid];
             const orang = semua.find(o => o.id === id);
-            if (!orang) { tampilToast(`ID "${id}" tidak ditemukan!`, 'error'); return; }
+            if (!orang) return tampilToast(`ID "${id}" tidak ditemukan!`, 'error');
 
             const tglHariIni = formatTanggal();
             const waktuSekarang = formatWaktu();
@@ -3566,26 +3536,46 @@
 
             let aksi = '';
             if (!existing) {
-                // Jam Masuk
-                const entri = {
+                // INSERT JAM MASUK
+                const dbEntry = {
                     id: `KHD-${Date.now()}`,
-                    penggunaId: orang.id, nama: orang.nama,
+                    pengguna_id: orang.id,
+                    nama: orang.nama,
                     role: orang.id.startsWith('SANTRI') ? 'murid' : 'guru',
-                    tanggal: tglHariIni, jamMasuk: waktuSekarang, jamPulang: null,
+                    tanggal: tglHariIni,
+                    jam_masuk: waktuSekarang + ":00",
                 };
-                appState.kehadiran.push(entri);
+                const { error } = await supabaseClient.from('kehadiran').insert([dbEntry]);
+                if (error) {
+                    console.error("Supabase Insert Error:", error);
+                    return tampilToast('Gagal mencatat absensi ke server', 'error');
+                }
+
+                appState.kehadiran.push({
+                    id: dbEntry.id, penggunaId: dbEntry.pengguna_id, nama: dbEntry.nama, role: dbEntry.role,
+                    tanggal: dbEntry.tanggal, jamMasuk: waktuSekarang, jamPulang: null
+                });
                 aksi = 'JAM MASUK';
+
             } else if (!existing.jamPulang && waktuSekarang >= batasJam) {
-                // Jam Pulang
+                // UPDATE JAM PULANG
+                const { error } = await supabaseClient.from('kehadiran')
+                    .update({ jam_pulang: waktuSekarang + ":00" })
+                    .eq('id', existing.id);
+                if (error) {
+                    console.error("Supabase Update Error:", error);
+                    return tampilToast('Gagal update jam pulang di server', 'error');
+                }
+
                 existing.jamPulang = waktuSekarang;
                 aksi = 'JAM PULANG';
+
             } else if (!existing.jamPulang) {
-                tampilToast(`${orang.nama} sudah tercatat masuk pukul ${existing.jamMasuk}`, 'peringatan'); return;
+                return tampilToast(`${orang.nama} sudah tercatat masuk pukul ${existing.jamMasuk}`, 'peringatan');
             } else {
-                tampilToast(`${orang.nama} sudah lengkap hari ini (Masuk: ${existing.jamMasuk}, Pulang: ${existing.jamPulang})`, 'info'); return;
+                return tampilToast(`${orang.nama} sudah lengkap hari ini (Masuk: ${existing.jamMasuk}, Pulang: ${existing.jamPulang})`, 'info');
             }
 
-            await simpanState();
             tampilModalSuksesScan(orang, aksi, waktuSekarang);
             renderLogScan();
         }
@@ -3600,18 +3590,18 @@
             const warnaAksi = aksi === 'JAM MASUK' ? '#2ecc71' : '#3498db';
             document.getElementById('judul-modal-utama').textContent = '✅ Kehadiran Dicatat';
             document.getElementById('isi-modal-utama').innerHTML = `
-    <div class="modal-sukses-scan">
-      <div class="modal-sukses-ikon">${orang.id.startsWith('SANTRI') ? '📖' : '👨‍🏫'}</div>
-      <div class="modal-sukses-nama">${orang.nama}</div>
-      <div class="modal-sukses-waktu">${waktu} WIB</div>
-      <span class="modal-sukses-status" style="background:${warnaAksi}22;color:${warnaAksi};border:1px solid ${warnaAksi}44">
-        ${aksi === 'JAM MASUK' ? '✅ JAM MASUK' : '🏃 JAM PULANG'}
-      </span>
-      <div class="divider"></div>
-      <div class="modal-sukses-doa">${doa.arab}</div>
-      <div class="modal-sukses-doa-latin">${doa.latin}</div>
-    </div>
-  `;
+        <div class="modal-sukses-scan">
+            <div class="modal-sukses-ikon">${orang.id.startsWith('SANTRI') ? '📖' : '👨‍🏫'}</div>
+            <div class="modal-sukses-nama">${orang.nama}</div>
+            <div class="modal-sukses-waktu">${waktu} WIB</div>
+            <span class="modal-sukses-status" style="background:${warnaAksi}22;color:${warnaAksi};border:1px solid ${warnaAksi}44">
+                ${aksi === 'JAM MASUK' ? '✅ JAM MASUK' : '🏃 JAM PULANG'}
+            </span>
+            <div class="divider"></div>
+            <div class="modal-sukses-doa">${doa.arab}</div>
+            <div class="modal-sukses-doa-latin">${doa.latin}</div>
+        </div>
+    `;
             bukaModalUtama();
             setTimeout(tutupModalUtama, 3500);
         }
@@ -3622,49 +3612,43 @@
             const el = document.getElementById('log-scan-hari-ini');
             if (!el) return;
             el.innerHTML = log.length ? log.map(k => `
-    <div class="feed-item">
-      <div class="feed-ikon" style="background:rgba(46,204,113,0.1)">${k.role === 'guru' ? '👨‍🏫' : '📖'}</div>
-      <div class="feed-konten">
-        <div class="feed-nama">${k.nama}</div>
-        <div class="feed-aksi">Masuk: ${k.jamMasuk} ${k.jamPulang ? '| Pulang: ' + k.jamPulang : ''}</div>
-      </div>
-    </div>
-  `).join('') : '<div class="empty-state"><div class="empty-state-teks">Belum ada scan hari ini</div></div>';
+        <div class="feed-item">
+            <div class="feed-ikon" style="background:rgba(46,204,113,0.1)">${k.role === 'guru' ? '👨‍🏫' : '📖'}</div>
+            <div class="feed-konten">
+                <div class="feed-nama">${k.nama}</div>
+                <div class="feed-aksi">Masuk: ${k.jamMasuk} ${k.jamPulang ? '| Pulang: ' + k.jamPulang : ''}</div>
+            </div>
+        </div>
+    `).join('') : '<div class="empty-state"><div class="empty-state-teks">Belum ada scan hari ini</div></div>';
         }
 
-        // FUNGSI INI TELAH DIPERBARUI MENGGUNAKAN IMAGE API
         function loadIdGuru() {
             const guru = appState.guru.find(g => g.id === pengguna.id);
             if (!guru) { document.getElementById('kartu-id-guru-wrap').innerHTML = '<div class="empty-state">Data tidak ditemukan</div>'; return; }
+            // PERBAIKAN: Resolusi gambar QR code digital ID diperbesar ke 400x400
             document.getElementById('kartu-id-guru-wrap').innerHTML = `
-    <div class="kartu-id-digital">
-      <div class="kartu-id-header">
-        <img src="https://raw.githubusercontent.com/gamesfaqih2025-byte/AL-KHIDMAT-DIGITAL/refs/heads/main/Desain%20tanpa%20judul.png"
-          class="kartu-id-logo" onerror="this.style.display='none'">
-        <div>
-          <div class="kartu-id-sistem">Al-Khidmat Digital</div>
-          <div class="kartu-id-sub">${appState.pengaturan.namaMadrasah}</div>
+        <div class="kartu-id-digital">
+            <div class="kartu-id-header">
+                <img src="https://raw.githubusercontent.com/gamesfaqih2025-byte/AL-KHIDMAT-DIGITAL/refs/heads/main/Desain%20tanpa%20judul.png" class="kartu-id-logo" onerror="this.style.display='none'">
+                <div>
+                    <div class="kartu-id-sistem">Al-Khidmat Digital</div>
+                    <div class="kartu-id-sub">${appState.pengaturan.namaMadrasah}</div>
+                </div>
+            </div>
+            <div class="kartu-id-avatar">${guru.nama.charAt(0)}</div>
+            <div class="kartu-id-nama">${guru.nama}</div>
+            <div class="kartu-id-nip">${guru.id}</div>
+            <div class="kartu-id-jabatan">Guru — ${guru.mapel}</div>
+            <img src="https://api.qrserver.com/v1/create-qr-code/?size=400x400&data=${guru.id}&color=000000&bgcolor=ffffff" style="border-radius:var(--radius-sm); width:160px; height:160px; margin: 14px auto; display: block;" alt="QR Code">
+            <div class="kartu-id-footer">${appState.pengaturan.tahunAjaran} • Scan untuk absensi</div>
         </div>
-      </div>
-      <div class="kartu-id-avatar">${guru.nama.charAt(0)}</div>
-      <div class="kartu-id-nama">${guru.nama}</div>
-      <div class="kartu-id-nip">${guru.id}</div>
-      <div class="kartu-id-jabatan">Guru — ${guru.mapel}</div>
-      
-      <!-- Menggunakan Image API agar 100% muncul -->
-      <img src="https://api.qrserver.com/v1/create-qr-code/?size=160x160&data=${guru.id}&color=0d3b2e&bgcolor=fdf6e3" style="border-radius:var(--radius-sm); width:160px; height:160px; margin: 14px auto; display: block;" alt="QR Code">
-      
-      <div class="kartu-id-footer">${appState.pengaturan.tahunAjaran} • Scan untuk absensi</div>
-    </div>
-  `;
+    `;
         }
 
         // ============================================================
         // DHABIT MURID (GURU)
         // ============================================================
-        function loadDhabitGuru() {
-            renderTabelDhabit();
-        }
+        function loadDhabitGuru() { renderTabelDhabit(); }
         function renderTabelDhabit(filter = '') {
             const tglKerja = [];
             for (let i = 13; i >= 0; i--) {
@@ -3680,47 +3664,56 @@
                 const predikat = persen >= 90 ? '⭐ Mumtaz' : persen >= 75 ? '✅ Jayyid' : persen >= 60 ? '⚠️ Maqbul' : '❌ Dhoif';
                 const warna = persen >= 90 ? 'badge-emas' : persen >= 75 ? 'badge-hijau' : persen >= 60 ? 'badge-kuning' : 'badge-merah';
                 return `<tr>
-      <td><code style="color:var(--emas);font-size:11px">${m.id}</code></td>
-      <td>${m.nama}</td>
-      <td><span class="badge badge-hijau">${hadir}</span></td>
-      <td><span class="badge badge-merah">${absen}</span></td>
-      <td><span class="badge badge-kuning">${terlambat}</span></td>
-      <td>
-        <div style="display:flex;align-items:center;gap:8px">
-          <div style="flex:1;height:6px;background:var(--border);border-radius:3px">
-            <div style="width:${persen}%;height:6px;background:linear-gradient(90deg,var(--zamrud),var(--emas));border-radius:3px"></div>
-          </div>
-          <span style="font-size:12px;font-weight:600;color:var(--teks-utama)">${persen}%</span>
-        </div>
-      </td>
-      <td><span class="badge ${warna}">${predikat}</span></td>
-    </tr>`;
+            <td><code style="color:var(--emas);font-size:11px">${m.id}</code></td>
+            <td>${m.nama}</td>
+            <td><span class="badge badge-hijau">${hadir}</span></td>
+            <td><span class="badge badge-merah">${absen}</span></td>
+            <td><span class="badge badge-kuning">${terlambat}</span></td>
+            <td>
+                <div style="display:flex;align-items:center;gap:8px">
+                    <div style="flex:1;height:6px;background:var(--border);border-radius:3px">
+                        <div style="width:${persen}%;height:6px;background:linear-gradient(90deg,var(--zamrud),var(--emas));border-radius:3px"></div>
+                    </div>
+                    <span style="font-size:12px;font-weight:600;color:var(--teks-utama)">${persen}%</span>
+                </div>
+            </td>
+            <td><span class="badge ${warna}">${predikat}</span></td>
+        </tr>`;
             }).join('');
         }
         function filterDhabit() { renderTabelDhabit(document.getElementById('cari-dhabit').value); }
 
         // ============================================================
-        // CATATAN GURU
+        // CATATAN GURU (SQL UPSERT)
         // ============================================================
         function loadCatatanGuru() {
             const tgl = formatTanggal();
             document.getElementById('subjudul-catatan-guru').textContent = namaHari();
             const kunci = `${pengguna.id}_${tgl}`;
-            const tersimpan = appState.catatan[kunci] || '';
-            document.getElementById('textarea-catatan').value = tersimpan;
-            // Auto-save
+            document.getElementById('textarea-catatan').value = appState.catatan[kunci] || '';
+
             document.getElementById('textarea-catatan').oninput = () => {
                 clearTimeout(document.getElementById('textarea-catatan')._timer);
                 document.getElementById('status-simpan-catatan').textContent = 'Mengetik...';
                 document.getElementById('textarea-catatan')._timer = setTimeout(() => simpanCatatan(true), 1500);
             };
         }
+
         async function simpanCatatan(otomatis = false) {
-            const kunci = `${pengguna.id}_${formatTanggal()}`;
-            appState.catatan[kunci] = document.getElementById('textarea-catatan').value;
-            await simpanState();
-            document.getElementById('status-simpan-catatan').textContent = otomatis ? '✅ Auto-tersimpan' : '✅ Tersimpan!';
-            if (!otomatis) tampilToast('Catatan berhasil disimpan!', 'sukses');
+            const teks = document.getElementById('textarea-catatan').value;
+            const tgl = formatTanggal();
+            const kunci = `${pengguna.id}_${tgl}`;
+            appState.catatan[kunci] = teks;
+
+            const { error } = await supabaseClient.from('catatan')
+                .upsert({ guru_id: pengguna.id, tanggal: tgl, teks: teks }, { onConflict: 'guru_id,tanggal' });
+
+            if (error) {
+                document.getElementById('status-simpan-catatan').textContent = '❌ Gagal Menyimpan';
+            } else {
+                document.getElementById('status-simpan-catatan').textContent = otomatis ? '✅ Auto-tersimpan' : '✅ Tersimpan!';
+                if (!otomatis) tampilToast('Catatan berhasil disimpan ke Database!', 'sukses');
+            }
         }
 
         // ============================================================
@@ -3730,7 +3723,6 @@
             document.getElementById('teks-sapaan-murid').innerHTML = `${sapaaWaktu()}, <span>${pengguna.nama.split(' ')[0]}</span>!`;
             document.getElementById('teks-tanggal-murid').textContent = namaHari();
 
-            // Progress ring
             const tglKerja = [];
             const bln = new Date().getMonth(); const thn = new Date().getFullYear();
             for (let d = 1; d <= new Date().getDate(); d++) {
@@ -3739,46 +3731,33 @@
             }
             const hadirBulan = tglKerja.filter(tgl => appState.kehadiran.find(k => k.tanggal === tgl && k.penggunaId === pengguna.id)).length;
             const persen = tglKerja.length ? Math.round((hadirBulan / tglKerja.length) * 100) : 0;
-            const circumference = 2 * Math.PI * 50;
-            const offset = circumference - (persen / 100) * circumference;
             const ring = document.getElementById('ring-circle-murid');
-            if (ring) { ring.style.strokeDashoffset = offset; }
+            if (ring) ring.style.strokeDashoffset = (2 * Math.PI * 50) - (persen / 100) * (2 * Math.PI * 50);
             const persenEl = document.getElementById('ring-persen-murid');
             if (persenEl) persenEl.textContent = persen + '%';
 
-            // Jadwal hari ini
-            const hariEn = hariInggris();
             const hariIdMap = { Monday: 'Senin', Tuesday: 'Selasa', Wednesday: 'Rabu', Thursday: 'Kamis', Friday: 'Jumat', Saturday: 'Sabtu', Sunday: 'Ahad' };
-            const hariId = hariIdMap[hariEn] || '';
+            const hariId = hariIdMap[hariInggris()] || '';
             const jadwalHariIni = appState.jadwal.filter(j => j.hari === hariId);
             document.getElementById('jadwal-murid-hari-ini').innerHTML = jadwalHariIni.length ?
                 jadwalHariIni.map(j => {
                     const guru = appState.guru.find(g => g.id === j.guru);
-                    return `<div class="jadwal-item">
-        <div class="jadwal-waktu">${j.jam}</div>
-        <div><div class="jadwal-mapel">${j.mapel}</div><div class="jadwal-kelas">${guru ? guru.nama : ''}</div></div>
-      </div>`;
-                }).join('') :
-                '<div class="empty-state"><div class="empty-state-ikon">📅</div><div class="empty-state-teks">Tidak ada jadwal hari ini</div></div>';
+                    return `<div class="jadwal-item"><div class="jadwal-waktu">${j.jam}</div><div><div class="jadwal-mapel">${j.mapel}</div><div class="jadwal-kelas">${guru ? guru.nama : ''}</div></div></div>`;
+                }).join('') : '<div class="empty-state"><div class="empty-state-ikon">📅</div><div class="empty-state-teks">Tidak ada jadwal hari ini</div></div>';
         }
 
         // ============================================================
         // KALENDER KEHADIRAN MURID
         // ============================================================
-        function loadKalenderMurid() {
-            renderKalender();
-        }
-
+        function loadKalenderMurid() { renderKalender(); }
         function navigasiKalender(delta) {
             bulanKalender += delta;
             if (bulanKalender > 11) { bulanKalender = 0; tahunKalender++; }
             if (bulanKalender < 0) { bulanKalender = 11; tahunKalender--; }
             renderKalender();
         }
-
         function renderKalender() {
-            const namaBulan = new Date(tahunKalender, bulanKalender, 1)
-                .toLocaleDateString('id-ID', { month: 'long', year: 'numeric' });
+            const namaBulan = new Date(tahunKalender, bulanKalender, 1).toLocaleDateString('id-ID', { month: 'long', year: 'numeric' });
             document.getElementById('label-bulan-kalender').textContent = namaBulan;
             document.getElementById('subjudul-kalender-murid').textContent = `Bulan ${namaBulan}`;
 
@@ -3808,150 +3787,141 @@
                         else { kls = 'kal-absen'; status = '✗'; }
                     }
                 }
-
-                html += `<div class="kalender-sel ${kls} ${isToday ? 'kal-hari-ini' : ''}" title="${tglStr}">
-      ${status || d}
-    </div>`;
+                html += `<div class="kalender-sel ${kls} ${isToday ? 'kal-hari-ini' : ''}" title="${tglStr}">${status || d}</div>`;
             }
             document.getElementById('kalender-grid-murid').innerHTML = html;
         }
 
         // ============================================================
-        // TUGAS MURID
+        // TUGAS & PRESTASI MURID (DUMMY DATA UI)
         // ============================================================
         function loadTugasMurid() {
             const tugas = [
                 { ikon: '📖', judul: 'Hafalan Surat Al-Mulk', mapel: 'Tahfidz', deadline: '3 hari lagi', urgen: true },
                 { ikon: '✏️', judul: 'Latihan Khat Naskhi', mapel: 'Kaligrafi', deadline: '7 hari lagi', urgen: false },
                 { ikon: '📚', judul: 'Ringkasan Bab Thaharah', mapel: 'Fiqih', deadline: '2 hari lagi', urgen: true },
-                { ikon: '🗣️', judul: 'Mufradat Bab Al-Bayt', mapel: 'Bahasa Arab', deadline: '5 hari lagi', urgen: false },
-                { ikon: '📝', judul: 'Muroja\'ah Juz 30', mapel: 'Tahfidz', deadline: '1 hari lagi', urgen: true },
             ];
             document.getElementById('daftar-tugas-murid').innerHTML = tugas.map(t => `
-    <div class="tugas-item">
-      <div class="tugas-ikon">${t.ikon}</div>
-      <div class="tugas-konten">
-        <div class="tugas-judul">${t.judul}</div>
-        <div class="tugas-mapel">${t.mapel}</div>
-        <div class="tugas-deadline">⏰ ${t.deadline}</div>
-      </div>
-      <span class="badge ${t.urgen ? 'badge-merah' : 'badge-hijau'}">${t.urgen ? '🔴 Urgent' : '✅ Ok'}</span>
-    </div>
-  `).join('');
+        <div class="tugas-item">
+            <div class="tugas-ikon">${t.ikon}</div>
+            <div class="tugas-konten"><div class="tugas-judul">${t.judul}</div><div class="tugas-mapel">${t.mapel}</div><div class="tugas-deadline">⏰ ${t.deadline}</div></div>
+            <span class="badge ${t.urgen ? 'badge-merah' : 'badge-hijau'}">${t.urgen ? '🔴 Urgent' : '✅ Ok'}</span>
+        </div>
+    `).join('');
         }
 
-        // ============================================================
-        // PRESTASI MURID
-        // ============================================================
         function loadPrestasiMurid() {
             const prestasi = [
                 { medali: '🥇', nama: 'Juara 1 Tahfidz Juz 30', tgl: 'Muharram 1446 H' },
                 { medali: '🥈', nama: 'Juara 2 Musabaqah Kaligrafi', tgl: 'Safar 1446 H' },
-                { medali: '🏅', nama: 'Santri Teladan Bulan Ini', tgl: 'Rabi\' Awwal 1446 H' },
-                { medali: '⭐', nama: 'Penilaian Akhlak Terbaik', tgl: 'Rabi\' Tsani 1446 H' },
             ];
             document.getElementById('daftar-prestasi-murid').innerHTML = prestasi.map(p => `
-    <div class="prestasi-item">
-      <div class="prestasi-medali">${p.medali}</div>
-      <div>
-        <div class="prestasi-nama">${p.nama}</div>
-        <div class="prestasi-tgl">📅 ${p.tgl}</div>
-      </div>
-    </div>
-  `).join('');
+        <div class="prestasi-item"><div class="prestasi-medali">${p.medali}</div><div><div class="prestasi-nama">${p.nama}</div><div class="prestasi-tgl">📅 ${p.tgl}</div></div></div>
+    `).join('');
         }
 
-        // ============================================================
-        // MODE DEMO SCAN
-        // ============================================================
         function bukaModeDemo() {
             document.getElementById('judul-modal-utama').textContent = '🎬 Mode Demo Scan';
             const semua = [...appState.guru, ...appState.murid];
             document.getElementById('isi-modal-utama').innerHTML = `
-    <p style="font-size:13px;color:var(--teks-sekunder);margin-bottom:12px">Pilih pengguna untuk simulasi scan kehadiran:</p>
-    <div style="display:flex;flex-direction:column;gap:8px;max-height:320px;overflow-y:auto">
-      ${semua.map(o => `
-        <button class="btn btn-outline" style="justify-content:flex-start;gap:10px" onclick="prosesHasilScan('${o.id}');tutupModalUtama()">
-          <span>${o.id.startsWith('SANTRI') ? '📖' : '👨‍🏫'}</span>
-          <span style="flex:1;text-align:left">${o.nama}</span>
-          <code style="font-size:10px;color:var(--emas)">${o.id}</code>
-        </button>
-      `).join('')}
-    </div>
-  `;
+        <p style="font-size:13px;color:var(--teks-sekunder);margin-bottom:12px">Pilih pengguna untuk simulasi scan kehadiran:</p>
+        <div style="display:flex;flex-direction:column;gap:8px;max-height:320px;overflow-y:auto">
+            ${semua.map(o => `
+                <button class="btn btn-outline" style="justify-content:flex-start;gap:10px" onclick="prosesHasilScan('${o.id}');tutupModalUtama()">
+                    <span>${o.id.startsWith('SANTRI') ? '📖' : '👨‍🏫'}</span><span style="flex:1;text-align:left">${o.nama}</span><code style="font-size:10px;color:var(--emas)">${o.id}</code>
+                </button>
+            `).join('')}
+        </div>
+    `;
             bukaModalUtama();
         }
 
         // ============================================================
-        // MODAL UNIVERSAL
+        // MODAL UNIVERSAL & KIOSK SCAN PUBLIK (DIPERBAIKI)
         // ============================================================
-        function bukaModalUtama() {
-            document.getElementById('overlay-modal-utama').classList.remove('tersembunyi');
-        }
-        function tutupModalUtama(event) {
-            if (event && event.target !== document.getElementById('overlay-modal-utama')) return;
-            document.getElementById('overlay-modal-utama').classList.add('tersembunyi');
-        }
+        function bukaModalUtama() { document.getElementById('overlay-modal-utama').classList.remove('tersembunyi'); }
+        function tutupModalUtama(e) { if (!e || e.target === document.getElementById('overlay-modal-utama')) document.getElementById('overlay-modal-utama').classList.add('tersembunyi'); }
 
-        // ============================================================
-        // KIOSK SCAN PUBLIK
-        // ============================================================
-        function bukaKioskScan() {
-            document.getElementById('kiosk-scan-wrap').classList.remove('tersembunyi');
-            mulaiKiosk();
-        }
+        function bukaKioskScan() { document.getElementById('kiosk-scan-wrap').classList.remove('tersembunyi'); mulaiKiosk(); }
+
         function tutupKiosk() {
+            isScanningKiosk = false; // PERBAIKAN: Stop frame loop kiosk
             if (streamKiosk) { streamKiosk.getTracks().forEach(t => t.stop()); streamKiosk = null; }
-            clearInterval(intervalScanKiosk);
             document.getElementById('kiosk-scan-wrap').classList.add('tersembunyi');
         }
+
+        function prosesFrameKiosk() {
+            if (!isScanningKiosk) return; // Keluar jika kiosk ditutup
+
+            const v = document.getElementById('video-kiosk'), c = document.getElementById('canvas-kiosk');
+            if (v && v.readyState === v.HAVE_ENOUGH_DATA) {
+                c.width = v.videoWidth; c.height = v.videoHeight;
+
+                // PERBAIKAN: willReadFrequently untuk optimasi
+                const ctx = c.getContext('2d', { willReadFrequently: true });
+                ctx.drawImage(v, 0, 0, c.width, c.height);
+
+                if (typeof jsQR !== 'undefined') {
+                    const img = ctx.getImageData(0, 0, c.width, c.height);
+                    // PERBAIKAN: Inversion attempts
+                    const code = jsQR(img.data, img.width, img.height, { inversionAttempts: "attemptBoth" });
+                    if (code && code.data) {
+                        isScanningKiosk = false; // Jeda
+                        prosesHasilScan(code.data.trim().toUpperCase());
+
+                        setTimeout(() => {
+                            if (streamKiosk) {
+                                isScanningKiosk = true;
+                                requestAnimationFrame(prosesFrameKiosk);
+                            }
+                        }, 3000);
+                        return;
+                    }
+                }
+            }
+            // Loop frame secara cerdas
+            requestAnimationFrame(prosesFrameKiosk);
+        }
+
         function mulaiKiosk() {
-            if (!navigator.mediaDevices?.getUserMedia) { tampilToast('Kamera tidak tersedia.', 'error'); return; }
-            navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } })
+            if (!navigator.mediaDevices?.getUserMedia) return tampilToast('Kamera tidak tersedia.', 'error');
+
+            // PERBAIKAN: Resolusi HD untuk scan Kiosk
+            const constraints = {
+                video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } }
+            };
+
+            navigator.mediaDevices.getUserMedia(constraints)
+                .catch(() => navigator.mediaDevices.getUserMedia({ video: true }))
                 .then(stream => {
                     streamKiosk = stream;
-                    document.getElementById('video-kiosk').srcObject = stream;
-                    intervalScanKiosk = setInterval(() => {
-                        const v = document.getElementById('video-kiosk'), c = document.getElementById('canvas-kiosk');
-                        if (!v || v.readyState !== v.HAVE_ENOUGH_DATA) return;
-                        c.width = v.videoWidth; c.height = v.videoHeight;
-                        const ctx = c.getContext('2d'); ctx.drawImage(v, 0, 0);
-                        if (typeof jsQR !== 'undefined') {
-                            const img = ctx.getImageData(0, 0, c.width, c.height);
-                            const code = jsQR(img.data, img.width, img.height);
-                            if (code) {
-                                clearInterval(intervalScanKiosk);
-                                prosesHasilScan(code.data);
-                                setTimeout(() => { if (streamKiosk) intervalScanKiosk = setInterval(arguments.callee, 300); }, 3000);
-                            }
-                        }
-                    }, 300);
-                })
-                .catch(() => tampilToast('Gagal mengakses kamera.', 'error'));
+                    const video = document.getElementById('video-kiosk');
+                    video.srcObject = stream;
+
+                    video.onloadedmetadata = () => {
+                        video.play();
+                        isScanningKiosk = true;
+                        requestAnimationFrame(prosesFrameKiosk); // Ganti setInterval
+                    };
+                }).catch(() => tampilToast('Gagal mengakses kamera.', 'error'));
         }
 
         // ============================================================
-        // JAM DIGITAL
+        // JAM DIGITAL & TEMA
         // ============================================================
         function jalankanJam() {
             clearInterval(intervalJam);
             function updateJam() {
-                const sekarang = new Date();
-                const str = sekarang.toLocaleTimeString('id-ID', { hour12: false });
+                const str = new Date().toLocaleTimeString('id-ID', { hour12: false });
                 const el = document.getElementById('topbar-jam');
                 if (el) el.textContent = str;
             }
-            updateJam();
-            intervalJam = setInterval(updateJam, 1000);
+            updateJam(); intervalJam = setInterval(updateJam, 1000);
         }
 
-        // ============================================================
-        // TEMA GELAP / TERANG
-        // ============================================================
         function toggleTema() {
             const html = document.documentElement;
-            const temaSaatIni = html.getAttribute('data-theme');
-            const temaBaru = temaSaatIni === 'dark' ? 'light' : 'dark';
+            const temaBaru = html.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
             html.setAttribute('data-theme', temaBaru);
             document.getElementById('btn-tema').textContent = temaBaru === 'dark' ? '🌙' : '☀️';
             localStorage.setItem('akd_tema', temaBaru);
@@ -3970,11 +3940,11 @@
         // ============================================================
         async function init() {
             muatTema();
-            await inisialisasiData();
-            tampilToast('Sistem siap! بِسْمِ اللّٰهِ 🌙', 'sukses');
+            await inisialisasiData(); // Menarik seluruh data dari Supabase SQL
+            tampilToast('Sistem terhubung ke Database! بِسْمِ اللّٰهِ 🌙', 'sukses');
         }
 
-        window.addEventListener('DOMContentLoaded', init);
+        window.addEventListener('DOMContentLoaded', init);    
     </script>
 </body>
 
