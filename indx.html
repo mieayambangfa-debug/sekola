@@ -1,0 +1,3981 @@
+<!DOCTYPE html>
+<html lang="id" data-theme="dark">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Al-Khidmat Digital — Sistem Manajemen Rumah Qur'an</title>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Amiri:ital,wght@0,400;0,700;1,400&family=Poppins:wght@300;400;500;600;700&display=swap"
+        rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <style>
+        /* ===== CSS VARIABLES ===== */
+        :root {
+            --hijau-tua: #0d3b2e;
+            --hijau-sedang: #155740;
+            --hijau-muda: #1e7a5a;
+            --zamrud: #2ecc71;
+            --zamrud-redup: #27ae60;
+            --emas: #c9a84c;
+            --emas-terang: #e8c76b;
+            --emas-redup: #a07830;
+            --putih: #ffffff;
+            --krem: #fdf6e3;
+            --bg-utama: #071f18;
+            --bg-kartu: #0f2e22;
+            --bg-sidebar: #091a14;
+            --bg-input: #0d2a1f;
+            --teks-utama: #e8f5ee;
+            --teks-sekunder: #8ab89a;
+            --teks-redup: #4a7260;
+            --border: #1a4a35;
+            --border-terang: #2a6a50;
+            --bayangan: rgba(0, 0, 0, 0.4);
+            --radius-sm: 8px;
+            --radius-md: 14px;
+            --radius-lg: 20px;
+            --radius-xl: 28px;
+            --transisi: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            --font-arab: 'Amiri', serif;
+            --font-ui: 'Poppins', sans-serif;
+            --z-sidebar: 100;
+            --z-topbar: 90;
+            --z-modal: 200;
+            --z-toast: 300;
+            --z-overlay: 150;
+        }
+
+        [data-theme="light"] {
+            --bg-utama: #f0f7f3;
+            --bg-kartu: #ffffff;
+            --bg-sidebar: #0d3b2e;
+            --bg-input: #e8f5ee;
+            --teks-utama: #0d2a1f;
+            --teks-sekunder: #2a6a50;
+            --teks-redup: #6a9a80;
+            --border: #c8e6d4;
+            --border-terang: #90c8a8;
+            --bayangan: rgba(0, 0, 0, 0.12);
+        }
+
+        /* ===== RESET & BASE ===== */
+        *,
+        *::before,
+        *::after {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        html,
+        body {
+            height: 100%;
+            font-family: var(--font-ui);
+        }
+
+        body {
+            background: var(--bg-utama);
+            color: var(--teks-utama);
+            overflow-x: hidden;
+            transition: background 0.3s, color 0.3s;
+        }
+
+        button {
+            cursor: pointer;
+            font-family: var(--font-ui);
+        }
+
+        input,
+        select,
+        textarea {
+            font-family: var(--font-ui);
+        }
+
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: var(--bg-utama);
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: var(--hijau-sedang);
+            border-radius: 3px;
+        }
+
+        .tersembunyi {
+            display: none !important;
+        }
+
+        /* ===== PATTERN SVG BACKGROUND ===== */
+        .pola-islami {
+            position: absolute;
+            inset: 0;
+            opacity: 0.04;
+            pointer-events: none;
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='80' height='80'%3E%3Cg fill='none' stroke='%23c9a84c' stroke-width='0.5'%3E%3Cpolygon points='40,2 76,21 76,59 40,78 4,59 4,21'/%3E%3Cpolygon points='40,14 64,27 64,53 40,66 16,53 16,27'/%3E%3Cpolygon points='40,26 52,33 52,47 40,54 28,47 28,33'/%3E%3Ccircle cx='40' cy='40' r='8'/%3E%3C/g%3E%3C/svg%3E");
+            background-size: 80px 80px;
+        }
+
+        /* ===== HALAMAN LOGIN ===== */
+        #halaman-login {
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: linear-gradient(135deg, #040f0b 0%, #071f18 30%, #0d3b2e 70%, #071f18 100%);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .login-dekorasi-kiri,
+        .login-dekorasi-kanan {
+            position: absolute;
+            width: 400px;
+            height: 400px;
+            border-radius: 50%;
+            background: radial-gradient(circle, rgba(201, 168, 76, 0.08) 0%, transparent 70%);
+            pointer-events: none;
+        }
+
+        .login-dekorasi-kiri {
+            top: -100px;
+            left: -100px;
+        }
+
+        .login-dekorasi-kanan {
+            bottom: -100px;
+            right: -100px;
+            background: radial-gradient(circle, rgba(46, 204, 113, 0.06) 0%, transparent 70%);
+        }
+
+        .kotak-login {
+            background: rgba(15, 46, 34, 0.85);
+            backdrop-filter: blur(20px);
+            border: 1px solid rgba(201, 168, 76, 0.2);
+            border-radius: var(--radius-xl);
+            padding: 40px 36px;
+            width: 100%;
+            max-width: 420px;
+            position: relative;
+            z-index: 1;
+            box-shadow: 0 24px 80px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(201, 168, 76, 0.15);
+        }
+
+        .kotak-login::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 200px;
+            height: 2px;
+            background: linear-gradient(90deg, transparent, var(--emas), transparent);
+            border-radius: 1px;
+        }
+
+        .login-logo-wrap {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            margin-bottom: 24px;
+        }
+
+        .login-logo-img {
+            width: 80px;
+            height: 80px;
+            border-radius: 50%;
+            border: 2px solid rgba(201, 168, 76, 0.4);
+            box-shadow: 0 0 30px rgba(201, 168, 76, 0.2);
+            object-fit: cover;
+            margin-bottom: 12px;
+        }
+
+        .login-bismillah {
+            font-family: var(--font-arab);
+            font-size: 22px;
+            color: var(--emas);
+            text-shadow: 0 0 20px rgba(201, 168, 76, 0.4);
+            margin-bottom: 6px;
+            text-align: center;
+        }
+
+        .login-nama-sistem {
+            font-size: 16px;
+            font-weight: 700;
+            color: var(--teks-utama);
+            letter-spacing: 0.5px;
+            text-align: center;
+        }
+
+        .login-subjudul {
+            font-size: 11px;
+            color: var(--teks-sekunder);
+            text-align: center;
+            margin-top: 2px;
+        }
+
+        .form-grup {
+            margin-bottom: 16px;
+        }
+
+        .form-label {
+            display: block;
+            font-size: 12px;
+            font-weight: 500;
+            color: var(--teks-sekunder);
+            margin-bottom: 6px;
+            letter-spacing: 0.5px;
+            text-transform: uppercase;
+        }
+
+        .form-input {
+            width: 100%;
+            padding: 12px 16px;
+            background: var(--bg-input);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-md);
+            color: var(--teks-utama);
+            font-size: 14px;
+            outline: none;
+            transition: var(--transisi);
+        }
+
+        .form-input:focus {
+            border-color: var(--emas);
+            box-shadow: 0 0 0 3px rgba(201, 168, 76, 0.15);
+        }
+
+        .form-input::placeholder {
+            color: var(--teks-redup);
+        }
+
+        .btn-utama {
+            width: 100%;
+            padding: 14px;
+            border: none;
+            border-radius: var(--radius-md);
+            background: linear-gradient(135deg, var(--hijau-muda), var(--zamrud-redup));
+            color: white;
+            font-size: 14px;
+            font-weight: 600;
+            letter-spacing: 0.5px;
+            position: relative;
+            overflow: hidden;
+            transition: var(--transisi);
+            box-shadow: 0 4px 20px rgba(46, 204, 113, 0.25);
+        }
+
+        .btn-utama:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 30px rgba(46, 204, 113, 0.35);
+        }
+
+        .btn-utama:active {
+            transform: translateY(0);
+        }
+
+        .btn-sekunder {
+            width: 100%;
+            padding: 12px;
+            border: 1px solid var(--border-terang);
+            border-radius: var(--radius-md);
+            background: transparent;
+            color: var(--teks-sekunder);
+            font-size: 13px;
+            font-weight: 500;
+            margin-top: 10px;
+            transition: var(--transisi);
+        }
+
+        .btn-sekunder:hover {
+            border-color: var(--emas);
+            color: var(--emas);
+            background: rgba(201, 168, 76, 0.05);
+        }
+
+        .login-error {
+            background: rgba(231, 76, 60, 0.15);
+            border: 1px solid rgba(231, 76, 60, 0.3);
+            border-radius: var(--radius-sm);
+            padding: 10px 14px;
+            color: #e74c3c;
+            font-size: 13px;
+            margin-top: 10px;
+            text-align: center;
+        }
+
+        /* ===== LAYOUT UTAMA ===== */
+        #layout-utama {
+            display: flex;
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        /* ===== SIDEBAR ===== */
+        .sidebar {
+            width: 260px;
+            min-width: 260px;
+            background: var(--bg-sidebar);
+            border-right: 1px solid var(--border);
+            display: flex;
+            flex-direction: column;
+            transition: width 0.3s, transform 0.3s;
+            z-index: var(--z-sidebar);
+            position: relative;
+            box-shadow: 4px 0 20px rgba(0, 0, 0, 0.3);
+        }
+
+        .sidebar.tertutup {
+            width: 0;
+            min-width: 0;
+            overflow: hidden;
+            transform: translateX(-260px);
+        }
+
+        .sidebar-header {
+            padding: 20px 18px;
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            background: linear-gradient(180deg, rgba(201, 168, 76, 0.08), transparent);
+        }
+
+        .sidebar-logo {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            border: 2px solid rgba(201, 168, 76, 0.4);
+            object-fit: cover;
+            flex-shrink: 0;
+        }
+
+        .sidebar-info {
+            flex: 1;
+            overflow: hidden;
+        }
+
+        .sidebar-nama {
+            font-size: 13px;
+            font-weight: 700;
+            color: var(--teks-utama);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .sidebar-sub {
+            font-size: 10px;
+            color: var(--teks-sekunder);
+        }
+
+        .sidebar-badge {
+            font-size: 9px;
+            font-weight: 600;
+            padding: 2px 8px;
+            border-radius: 20px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            background: rgba(201, 168, 76, 0.15);
+            color: var(--emas);
+            border: 1px solid rgba(201, 168, 76, 0.3);
+            margin-top: 3px;
+            display: inline-block;
+        }
+
+        .sidebar-nav {
+            flex: 1;
+            overflow-y: auto;
+            padding: 12px 0;
+        }
+
+        .nav-grup-label {
+            font-size: 9px;
+            font-weight: 600;
+            color: var(--teks-redup);
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            padding: 8px 20px 4px;
+            margin-top: 8px;
+        }
+
+        .nav-item {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 10px 20px;
+            margin: 2px 8px;
+            border-radius: var(--radius-md);
+            cursor: pointer;
+            transition: var(--transisi);
+            color: var(--teks-sekunder);
+            font-size: 13px;
+            font-weight: 500;
+            white-space: nowrap;
+            user-select: none;
+            position: relative;
+        }
+
+        .nav-item:hover {
+            background: rgba(46, 204, 113, 0.08);
+            color: var(--zamrud);
+        }
+
+        .nav-item.aktif {
+            background: linear-gradient(135deg, rgba(201, 168, 76, 0.15), rgba(46, 204, 113, 0.1));
+            color: var(--emas);
+            border: 1px solid rgba(201, 168, 76, 0.2);
+        }
+
+        .nav-item.aktif::before {
+            content: '';
+            position: absolute;
+            left: 0;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 3px;
+            height: 70%;
+            background: var(--emas);
+            border-radius: 0 2px 2px 0;
+        }
+
+        .nav-ikon {
+            font-size: 16px;
+            flex-shrink: 0;
+            width: 20px;
+            text-align: center;
+        }
+
+        .sidebar-footer {
+            padding: 16px;
+            border-top: 1px solid var(--border);
+        }
+
+        .sidebar-profil {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 10px;
+            background: rgba(201, 168, 76, 0.05);
+            border: 1px solid rgba(201, 168, 76, 0.15);
+            border-radius: var(--radius-md);
+        }
+
+        .profil-avatar {
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, var(--hijau-sedang), var(--zamrud-redup));
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 14px;
+            font-weight: 700;
+            color: white;
+            flex-shrink: 0;
+        }
+
+        .profil-nama {
+            font-size: 12px;
+            font-weight: 600;
+            color: var(--teks-utama);
+        }
+
+        .profil-role {
+            font-size: 10px;
+            color: var(--teks-sekunder);
+        }
+
+        /* ===== AREA KONTEN ===== */
+        .area-konten {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        /* ===== TOPBAR ===== */
+        .topbar {
+            height: 60px;
+            background: var(--bg-kartu);
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 20px;
+            z-index: var(--z-topbar);
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
+            flex-shrink: 0;
+        }
+
+        .topbar-kiri {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .btn-toggle-sidebar {
+            width: 36px;
+            height: 36px;
+            border: none;
+            background: var(--bg-input);
+            border-radius: var(--radius-sm);
+            color: var(--teks-sekunder);
+            font-size: 16px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: var(--transisi);
+        }
+
+        .btn-toggle-sidebar:hover {
+            background: var(--border);
+            color: var(--teks-utama);
+        }
+
+        .topbar-breadcrumb {
+            font-size: 13px;
+            color: var(--teks-sekunder);
+        }
+
+        .topbar-breadcrumb span {
+            color: var(--teks-utama);
+            font-weight: 600;
+        }
+
+        .topbar-kanan {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .topbar-jam {
+            font-size: 13px;
+            font-weight: 600;
+            color: var(--emas);
+            font-family: monospace;
+            letter-spacing: 1px;
+            background: rgba(201, 168, 76, 0.08);
+            padding: 6px 12px;
+            border-radius: var(--radius-sm);
+            border: 1px solid rgba(201, 168, 76, 0.15);
+        }
+
+        .btn-topbar {
+            width: 36px;
+            height: 36px;
+            border: none;
+            background: var(--bg-input);
+            border-radius: var(--radius-sm);
+            color: var(--teks-sekunder);
+            font-size: 16px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: var(--transisi);
+        }
+
+        .btn-topbar:hover {
+            background: var(--border);
+            color: var(--emas);
+        }
+
+        .btn-logout {
+            padding: 6px 14px;
+            border: 1px solid rgba(231, 76, 60, 0.3);
+            border-radius: var(--radius-sm);
+            background: rgba(231, 76, 60, 0.08);
+            color: #e74c3c;
+            font-size: 12px;
+            font-weight: 500;
+            transition: var(--transisi);
+        }
+
+        .btn-logout:hover {
+            background: rgba(231, 76, 60, 0.15);
+            border-color: rgba(231, 76, 60, 0.5);
+        }
+
+        /* ===== KONTEN UTAMA ===== */
+        .konten-utama {
+            flex: 1;
+            overflow-y: auto;
+            padding: 24px;
+            background: var(--bg-utama);
+        }
+
+        /* ===== HALAMAN (PAGE SECTIONS) ===== */
+        .halaman {
+            display: none;
+            animation: fadeIn 0.3s ease;
+        }
+
+        .halaman.aktif {
+            display: block;
+        }
+
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+                transform: translateY(10px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        /* ===== HEADER HALAMAN ===== */
+        .halaman-header {
+            display: flex;
+            align-items: flex-start;
+            justify-content: space-between;
+            margin-bottom: 24px;
+            flex-wrap: wrap;
+            gap: 12px;
+        }
+
+        .halaman-judul {
+            font-size: 22px;
+            font-weight: 700;
+            color: var(--teks-utama);
+        }
+
+        .halaman-subjudul {
+            font-size: 13px;
+            color: var(--teks-sekunder);
+            margin-top: 2px;
+        }
+
+        .halaman-aksi {
+            display: flex;
+            gap: 8px;
+            align-items: center;
+        }
+
+        /* ===== KARTU ===== */
+        .kartu {
+            background: var(--bg-kartu);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-lg);
+            padding: 20px;
+            transition: var(--transisi);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .kartu::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 1px;
+            background: linear-gradient(90deg, transparent, rgba(201, 168, 76, 0.3), transparent);
+        }
+
+        .kartu-judul {
+            font-size: 13px;
+            font-weight: 600;
+            color: var(--teks-sekunder);
+            margin-bottom: 16px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .kartu-judul::after {
+            content: '';
+            flex: 1;
+            height: 1px;
+            background: var(--border);
+        }
+
+        /* ===== GRID STATISTIK ===== */
+        .grid-statistik {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+            gap: 16px;
+            margin-bottom: 24px;
+        }
+
+        .kartu-stat {
+            background: var(--bg-kartu);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-lg);
+            padding: 20px;
+            position: relative;
+            overflow: hidden;
+            transition: var(--transisi);
+        }
+
+        .kartu-stat:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 30px var(--bayangan);
+        }
+
+        .kartu-stat-ikon {
+            width: 44px;
+            height: 44px;
+            border-radius: var(--radius-md);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 20px;
+            margin-bottom: 12px;
+        }
+
+        .kartu-stat-nilai {
+            font-size: 28px;
+            font-weight: 700;
+            color: var(--teks-utama);
+        }
+
+        .kartu-stat-label {
+            font-size: 12px;
+            color: var(--teks-sekunder);
+            margin-top: 2px;
+        }
+
+        .kartu-stat-tren {
+            font-size: 11px;
+            margin-top: 8px;
+        }
+
+        .stat-hijau .kartu-stat-ikon {
+            background: rgba(46, 204, 113, 0.12);
+            color: var(--zamrud);
+        }
+
+        .stat-emas .kartu-stat-ikon {
+            background: rgba(201, 168, 76, 0.12);
+            color: var(--emas);
+        }
+
+        .stat-merah .kartu-stat-ikon {
+            background: rgba(231, 76, 60, 0.12);
+            color: #e74c3c;
+        }
+
+        .stat-biru .kartu-stat-ikon {
+            background: rgba(52, 152, 219, 0.12);
+            color: #3498db;
+        }
+
+        .stat-ungu .kartu-stat-ikon {
+            background: rgba(155, 89, 182, 0.12);
+            color: #9b59b6;
+        }
+
+        /* ===== GRID 2 KOLOM ===== */
+        .grid-2 {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 16px;
+        }
+
+        .grid-3 {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 16px;
+        }
+
+        @media (max-width: 768px) {
+            .grid-2 {
+                grid-template-columns: 1fr;
+            }
+
+            .grid-3 {
+                grid-template-columns: 1fr;
+            }
+
+            .sidebar {
+                position: fixed;
+                height: 100vh;
+                left: 0;
+                top: 0;
+            }
+
+            .konten-utama {
+                padding: 16px;
+            }
+        }
+
+        /* ===== TABEL ===== */
+        .tabel-container {
+            overflow-x: auto;
+        }
+
+        .tabel-data {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 13px;
+        }
+
+        .tabel-data th {
+            padding: 10px 14px;
+            text-align: left;
+            color: var(--teks-sekunder);
+            font-weight: 600;
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            border-bottom: 1px solid var(--border);
+            background: rgba(201, 168, 76, 0.04);
+        }
+
+        .tabel-data td {
+            padding: 12px 14px;
+            border-bottom: 1px solid rgba(26, 74, 53, 0.3);
+            color: var(--teks-utama);
+            vertical-align: middle;
+        }
+
+        .tabel-data tr:hover td {
+            background: rgba(46, 204, 113, 0.04);
+        }
+
+        .tabel-data tr:last-child td {
+            border-bottom: none;
+        }
+
+        /* ===== BADGE STATUS ===== */
+        .badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            padding: 3px 10px;
+            border-radius: 20px;
+            font-size: 11px;
+            font-weight: 600;
+            letter-spacing: 0.3px;
+        }
+
+        .badge-hijau {
+            background: rgba(46, 204, 113, 0.12);
+            color: #2ecc71;
+            border: 1px solid rgba(46, 204, 113, 0.25);
+        }
+
+        .badge-merah {
+            background: rgba(231, 76, 60, 0.12);
+            color: #e74c3c;
+            border: 1px solid rgba(231, 76, 60, 0.25);
+        }
+
+        .badge-kuning {
+            background: rgba(241, 196, 15, 0.12);
+            color: #f1c40f;
+            border: 1px solid rgba(241, 196, 15, 0.25);
+        }
+
+        .badge-abu {
+            background: rgba(149, 165, 166, 0.12);
+            color: #95a5a6;
+            border: 1px solid rgba(149, 165, 166, 0.25);
+        }
+
+        .badge-biru {
+            background: rgba(52, 152, 219, 0.12);
+            color: #3498db;
+            border: 1px solid rgba(52, 152, 219, 0.25);
+        }
+
+        .badge-emas {
+            background: rgba(201, 168, 76, 0.12);
+            color: var(--emas);
+            border: 1px solid rgba(201, 168, 76, 0.25);
+        }
+
+        /* ===== TOMBOL ===== */
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 8px 16px;
+            border: none;
+            border-radius: var(--radius-md);
+            font-size: 13px;
+            font-weight: 500;
+            transition: var(--transisi);
+            cursor: pointer;
+        }
+
+        .btn-sm {
+            padding: 5px 12px;
+            font-size: 12px;
+        }
+
+        .btn-lg {
+            padding: 12px 24px;
+            font-size: 14px;
+            font-weight: 600;
+        }
+
+        .btn-primer {
+            background: linear-gradient(135deg, var(--hijau-muda), var(--zamrud-redup));
+            color: white;
+            box-shadow: 0 2px 10px rgba(46, 204, 113, 0.2);
+        }
+
+        .btn-primer:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 4px 16px rgba(46, 204, 113, 0.3);
+        }
+
+        .btn-emas {
+            background: linear-gradient(135deg, var(--emas), var(--emas-redup));
+            color: var(--hijau-tua);
+            font-weight: 600;
+        }
+
+        .btn-emas:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 4px 16px rgba(201, 168, 76, 0.3);
+        }
+
+        .btn-outline {
+            background: transparent;
+            border: 1px solid var(--border-terang);
+            color: var(--teks-sekunder);
+        }
+
+        .btn-outline:hover {
+            border-color: var(--zamrud);
+            color: var(--zamrud);
+            background: rgba(46, 204, 113, 0.05);
+        }
+
+        .btn-bahaya {
+            background: rgba(231, 76, 60, 0.12);
+            border: 1px solid rgba(231, 76, 60, 0.3);
+            color: #e74c3c;
+        }
+
+        .btn-bahaya:hover {
+            background: rgba(231, 76, 60, 0.2);
+        }
+
+        /* ===== INPUT SEARCH ===== */
+        .input-cari {
+            padding: 8px 14px;
+            background: var(--bg-input);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-md);
+            color: var(--teks-utama);
+            font-size: 13px;
+            outline: none;
+            transition: var(--transisi);
+            width: 220px;
+        }
+
+        .input-cari:focus {
+            border-color: var(--zamrud);
+            box-shadow: 0 0 0 3px rgba(46, 204, 113, 0.1);
+        }
+
+        /* ===== CHART BAR ===== */
+        .chart-bar-wrap {
+            display: flex;
+            align-items: flex-end;
+            gap: 8px;
+            height: 140px;
+            padding: 0 4px;
+        }
+
+        .chart-kolom {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 6px;
+            height: 100%;
+            justify-content: flex-end;
+        }
+
+        .chart-bar-visual {
+            width: 100%;
+            border-radius: 6px 6px 0 0;
+            min-height: 4px;
+            background: linear-gradient(180deg, var(--zamrud), var(--hijau-muda));
+            transition: height 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+            position: relative;
+        }
+
+        .chart-bar-nilai {
+            font-size: 10px;
+            font-weight: 600;
+            color: var(--emas);
+            position: absolute;
+            top: -18px;
+            left: 50%;
+            transform: translateX(-50%);
+            white-space: nowrap;
+        }
+
+        .chart-label {
+            font-size: 10px;
+            color: var(--teks-redup);
+            text-align: center;
+        }
+
+        /* ===== PROGRESS RING ===== */
+        .progress-ring-wrap {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+        }
+
+        .progress-ring-svg {
+            transform: rotate(-90deg);
+        }
+
+        .progress-ring-circle {
+            transition: stroke-dashoffset 0.8s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        .progress-ring-teks {
+            text-anchor: middle;
+            dominant-baseline: middle;
+            transform: rotate(90deg);
+            transform-origin: center;
+        }
+
+        /* ===== MODAL ===== */
+        .overlay-modal {
+            position: fixed;
+            inset: 0;
+            background: rgba(0, 0, 0, 0.7);
+            backdrop-filter: blur(4px);
+            z-index: var(--z-modal);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            animation: fadeOverlay 0.2s ease;
+        }
+
+        @keyframes fadeOverlay {
+            from {
+                opacity: 0;
+            }
+
+            to {
+                opacity: 1;
+            }
+        }
+
+        .kotak-modal {
+            background: var(--bg-kartu);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-xl);
+            padding: 28px;
+            width: 90%;
+            max-width: 480px;
+            box-shadow: 0 24px 80px rgba(0, 0, 0, 0.5);
+            animation: slideModal 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+            max-height: 85vh;
+            overflow-y: auto;
+        }
+
+        @keyframes slideModal {
+            from {
+                opacity: 0;
+                transform: scale(0.9) translateY(20px);
+            }
+
+            to {
+                opacity: 1;
+                transform: scale(1) translateY(0);
+            }
+        }
+
+        .modal-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 20px;
+        }
+
+        .modal-judul {
+            font-size: 16px;
+            font-weight: 700;
+            color: var(--teks-utama);
+        }
+
+        .btn-tutup-modal {
+            width: 32px;
+            height: 32px;
+            border: none;
+            background: var(--bg-input);
+            border-radius: var(--radius-sm);
+            color: var(--teks-sekunder);
+            font-size: 16px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: var(--transisi);
+        }
+
+        .btn-tutup-modal:hover {
+            background: rgba(231, 76, 60, 0.15);
+            color: #e74c3c;
+        }
+
+        /* ===== MODAL SUKSES SCAN ===== */
+        .modal-sukses-scan {
+            text-align: center;
+            padding: 10px;
+        }
+
+        .modal-sukses-ikon {
+            font-size: 60px;
+            margin-bottom: 12px;
+        }
+
+        .modal-sukses-nama {
+            font-size: 22px;
+            font-weight: 700;
+            color: var(--teks-utama);
+            margin-bottom: 4px;
+        }
+
+        .modal-sukses-waktu {
+            font-size: 14px;
+            color: var(--emas);
+            font-weight: 600;
+        }
+
+        .modal-sukses-status {
+            display: inline-block;
+            margin: 12px 0;
+            padding: 6px 18px;
+            border-radius: 20px;
+            font-size: 13px;
+            font-weight: 600;
+        }
+
+        .modal-sukses-doa {
+            font-family: var(--font-arab);
+            font-size: 18px;
+            color: var(--emas);
+            margin: 12px 0 4px;
+            line-height: 1.6;
+        }
+
+        .modal-sukses-doa-latin {
+            font-size: 12px;
+            color: var(--teks-sekunder);
+            font-style: italic;
+        }
+
+        /* ===== TOAST ===== */
+        #kontainer-toast {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            z-index: var(--z-toast);
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            pointer-events: none;
+        }
+
+        .toast {
+            padding: 12px 18px;
+            border-radius: var(--radius-md);
+            font-size: 13px;
+            font-weight: 500;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            animation: slideToast 0.3s ease;
+            pointer-events: all;
+            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+            max-width: 320px;
+        }
+
+        @keyframes slideToast {
+            from {
+                opacity: 0;
+                transform: translateX(40px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateX(0);
+            }
+        }
+
+        .toast.keluar {
+            animation: keluarToast 0.3s ease forwards;
+        }
+
+        @keyframes keluarToast {
+            to {
+                opacity: 0;
+                transform: translateX(40px);
+            }
+        }
+
+        .toast-sukses {
+            background: rgba(46, 204, 113, 0.15);
+            border: 1px solid rgba(46, 204, 113, 0.3);
+            color: #2ecc71;
+        }
+
+        .toast-error {
+            background: rgba(231, 76, 60, 0.15);
+            border: 1px solid rgba(231, 76, 60, 0.3);
+            color: #e74c3c;
+        }
+
+        .toast-info {
+            background: rgba(52, 152, 219, 0.15);
+            border: 1px solid rgba(52, 152, 219, 0.3);
+            color: #3498db;
+        }
+
+        .toast-peringatan {
+            background: rgba(241, 196, 15, 0.15);
+            border: 1px solid rgba(241, 196, 15, 0.3);
+            color: #f1c40f;
+        }
+
+        /* ===== LOADING OVERLAY ===== */
+        #overlay-loading {
+            position: fixed;
+            inset: 0;
+            background: rgba(7, 31, 24, 0.85);
+            backdrop-filter: blur(4px);
+            z-index: 999;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 16px;
+        }
+
+        .spinner {
+            width: 48px;
+            height: 48px;
+            border: 3px solid var(--border);
+            border-top-color: var(--emas);
+            border-radius: 50%;
+            animation: putar 0.8s linear infinite;
+        }
+
+        @keyframes putar {
+            to {
+                transform: rotate(360deg);
+            }
+        }
+
+        .loading-teks {
+            font-family: var(--font-arab);
+            font-size: 18px;
+            color: var(--emas);
+        }
+
+        /* ===== KAMERA SCAN ===== */
+        .kamera-wrap {
+            position: relative;
+            background: #000;
+            border-radius: var(--radius-lg);
+            overflow: hidden;
+            aspect-ratio: 4/3;
+            max-width: 400px;
+            margin: 0 auto;
+        }
+
+        #video-kamera {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        .kamera-overlay {
+            position: absolute;
+            inset: 0;
+            pointer-events: none;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .kamera-bingkai {
+            width: 200px;
+            height: 200px;
+            position: relative;
+        }
+
+        .kamera-bingkai::before,
+        .kamera-bingkai::after {
+            content: '';
+            position: absolute;
+            width: 40px;
+            height: 40px;
+        }
+
+        .kamera-bingkai::before {
+            top: 0;
+            left: 0;
+            border-top: 3px solid var(--emas);
+            border-left: 3px solid var(--emas);
+            border-radius: 4px 0 0 0;
+            box-shadow: -3px -3px 0 0 var(--emas), 3px 0 0 0 transparent, 0 3px 0 0 transparent;
+        }
+
+        .kamera-bingkai::after {
+            bottom: 0;
+            right: 0;
+            border-bottom: 3px solid var(--emas);
+            border-right: 3px solid var(--emas);
+            border-radius: 0 0 4px 0;
+        }
+
+        .kamera-scan-line {
+            position: absolute;
+            left: 10%;
+            right: 10%;
+            height: 2px;
+            background: linear-gradient(90deg, transparent, var(--zamrud), transparent);
+            animation: scanBergerak 2s ease-in-out infinite;
+            top: 10%;
+        }
+
+        @keyframes scanBergerak {
+
+            0%,
+            100% {
+                top: 15%;
+            }
+
+            50% {
+                top: 80%;
+            }
+        }
+
+        .kamera-tips {
+            text-align: center;
+            margin-top: 12px;
+            font-size: 12px;
+            color: var(--teks-sekunder);
+        }
+
+        #canvas-kamera {
+            display: none;
+        }
+
+        /* ===== QR CARD GURU ===== */
+        .kartu-id-digital {
+            max-width: 320px;
+            background: linear-gradient(135deg, var(--hijau-tua), var(--bg-sidebar));
+            border: 2px solid rgba(201, 168, 76, 0.4);
+            border-radius: var(--radius-xl);
+            padding: 24px;
+            position: relative;
+            overflow: hidden;
+            margin: 0 auto;
+        }
+
+        .kartu-id-digital::before {
+            content: 'بِسْمِ اللّٰهِ';
+            position: absolute;
+            top: 10px;
+            right: 14px;
+            font-family: var(--font-arab);
+            font-size: 12px;
+            color: rgba(201, 168, 76, 0.4);
+        }
+
+        .kartu-id-header {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 16px;
+            padding-bottom: 12px;
+            border-bottom: 1px solid rgba(201, 168, 76, 0.2);
+        }
+
+        .kartu-id-logo {
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            object-fit: cover;
+            border: 1px solid rgba(201, 168, 76, 0.4);
+        }
+
+        .kartu-id-sistem {
+            font-size: 11px;
+            font-weight: 700;
+            color: var(--emas);
+        }
+
+        .kartu-id-sub {
+            font-size: 9px;
+            color: var(--teks-sekunder);
+        }
+
+        .kartu-id-avatar {
+            width: 64px;
+            height: 64px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, var(--hijau-sedang), var(--zamrud-redup));
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 26px;
+            color: white;
+            font-weight: 700;
+            margin: 0 auto 12px;
+            border: 3px solid rgba(201, 168, 76, 0.4);
+        }
+
+        .kartu-id-nama {
+            font-size: 16px;
+            font-weight: 700;
+            color: var(--teks-utama);
+            text-align: center;
+        }
+
+        .kartu-id-nip {
+            font-size: 11px;
+            color: var(--emas);
+            text-align: center;
+            margin: 4px 0;
+            font-family: monospace;
+        }
+
+        .kartu-id-jabatan {
+            font-size: 11px;
+            color: var(--teks-sekunder);
+            text-align: center;
+        }
+
+        #kanvas-qr-guru {
+            margin: 14px auto;
+            display: block;
+            border-radius: var(--radius-sm);
+        }
+
+        .kartu-id-footer {
+            font-size: 9px;
+            color: var(--teks-redup);
+            text-align: center;
+            margin-top: 10px;
+            border-top: 1px solid rgba(201, 168, 76, 0.15);
+            padding-top: 8px;
+        }
+
+        /* ===== KALENDER KEHADIRAN ===== */
+        .kalender-grid {
+            display: grid;
+            grid-template-columns: repeat(7, 1fr);
+            gap: 4px;
+        }
+
+        .kalender-hari-label {
+            font-size: 11px;
+            color: var(--teks-redup);
+            text-align: center;
+            font-weight: 600;
+            padding: 4px;
+            text-transform: uppercase;
+        }
+
+        .kalender-sel {
+            aspect-ratio: 1;
+            border-radius: var(--radius-sm);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 12px;
+            font-weight: 500;
+            cursor: default;
+            transition: var(--transisi);
+            border: 1px solid transparent;
+        }
+
+        .kal-kosong {
+            background: transparent;
+        }
+
+        .kal-hadir {
+            background: rgba(46, 204, 113, 0.15);
+            color: #2ecc71;
+            border-color: rgba(46, 204, 113, 0.25);
+        }
+
+        .kal-absen {
+            background: rgba(231, 76, 60, 0.15);
+            color: #e74c3c;
+            border-color: rgba(231, 76, 60, 0.25);
+        }
+
+        .kal-sakit {
+            background: rgba(241, 196, 15, 0.15);
+            color: #f1c40f;
+            border-color: rgba(241, 196, 15, 0.25);
+        }
+
+        .kal-izin {
+            background: rgba(52, 152, 219, 0.15);
+            color: #3498db;
+            border-color: rgba(52, 152, 219, 0.25);
+        }
+
+        .kal-hari-ini {
+            box-shadow: 0 0 0 2px var(--emas);
+        }
+
+        .kal-libur {
+            background: var(--bg-input);
+            color: var(--teks-redup);
+        }
+
+        .kalender-legenda {
+            display: flex;
+            gap: 12px;
+            flex-wrap: wrap;
+            margin-top: 12px;
+        }
+
+        .legenda-item {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 11px;
+            color: var(--teks-sekunder);
+        }
+
+        .legenda-warna {
+            width: 12px;
+            height: 12px;
+            border-radius: 3px;
+        }
+
+        /* ===== FEED AKTIVITAS ===== */
+        .feed-item {
+            display: flex;
+            gap: 12px;
+            padding: 10px 0;
+            border-bottom: 1px solid rgba(26, 74, 53, 0.3);
+        }
+
+        .feed-item:last-child {
+            border-bottom: none;
+        }
+
+        .feed-ikon {
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 16px;
+            flex-shrink: 0;
+        }
+
+        .feed-konten {
+            flex: 1;
+        }
+
+        .feed-nama {
+            font-size: 13px;
+            font-weight: 600;
+            color: var(--teks-utama);
+        }
+
+        .feed-aksi {
+            font-size: 12px;
+            color: var(--teks-sekunder);
+        }
+
+        .feed-waktu {
+            font-size: 10px;
+            color: var(--teks-redup);
+            margin-top: 2px;
+        }
+
+        /* ===== SAPAAN BERANDA ===== */
+        .sapaan-wrap {
+            background: linear-gradient(135deg, var(--bg-kartu), rgba(46, 204, 113, 0.04));
+            border: 1px solid var(--border);
+            border-radius: var(--radius-xl);
+            padding: 24px 28px;
+            margin-bottom: 24px;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .sapaan-wrap::after {
+            content: '';
+            position: absolute;
+            right: 20px;
+            bottom: -10px;
+            width: 120px;
+            height: 120px;
+            border-radius: 50%;
+            background: radial-gradient(circle, rgba(201, 168, 76, 0.08) 0%, transparent 70%);
+        }
+
+        .sapaan-bismillah {
+            font-family: var(--font-arab);
+            font-size: 20px;
+            color: var(--emas);
+            margin-bottom: 6px;
+        }
+
+        .sapaan-teks {
+            font-size: 20px;
+            font-weight: 700;
+            color: var(--teks-utama);
+        }
+
+        .sapaan-teks span {
+            color: var(--zamrud);
+        }
+
+        .sapaan-tanggal {
+            font-size: 12px;
+            color: var(--teks-sekunder);
+            margin-top: 4px;
+        }
+
+        .sapaan-status-hadir {
+            margin-top: 12px;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 6px 14px;
+            border-radius: var(--radius-md);
+            font-size: 12px;
+            font-weight: 500;
+        }
+
+        /* ===== FORM PENGATURAN ===== */
+        .form-pengaturan {
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+        }
+
+        .form-grup-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 16px;
+        }
+
+        .form-input-pengaturan {
+            width: 100%;
+            padding: 10px 14px;
+            background: var(--bg-input);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-md);
+            color: var(--teks-utama);
+            font-size: 13px;
+            outline: none;
+            transition: var(--transisi);
+        }
+
+        .form-input-pengaturan:focus {
+            border-color: var(--emas);
+            box-shadow: 0 0 0 3px rgba(201, 168, 76, 0.1);
+        }
+
+        .form-select-pengaturan {
+            width: 100%;
+            padding: 10px 14px;
+            background: var(--bg-input);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-md);
+            color: var(--teks-utama);
+            font-size: 13px;
+            outline: none;
+            transition: var(--transisi);
+            cursor: pointer;
+        }
+
+        .checkbox-wrap {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 12px 16px;
+            background: var(--bg-input);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-md);
+            cursor: pointer;
+        }
+
+        .checkbox-wrap input {
+            width: 16px;
+            height: 16px;
+            cursor: pointer;
+            accent-color: var(--zamrud);
+        }
+
+        .checkbox-label {
+            font-size: 13px;
+            color: var(--teks-utama);
+        }
+
+        /* ===== TUGAS ===== */
+        .tugas-item {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            padding: 14px;
+            background: var(--bg-input);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-md);
+            margin-bottom: 10px;
+            transition: var(--transisi);
+        }
+
+        .tugas-item:hover {
+            border-color: var(--border-terang);
+        }
+
+        .tugas-ikon {
+            font-size: 24px;
+        }
+
+        .tugas-konten {
+            flex: 1;
+        }
+
+        .tugas-judul {
+            font-size: 14px;
+            font-weight: 600;
+            color: var(--teks-utama);
+        }
+
+        .tugas-mapel {
+            font-size: 12px;
+            color: var(--teks-sekunder);
+        }
+
+        .tugas-deadline {
+            font-size: 11px;
+            color: var(--teks-redup);
+            margin-top: 2px;
+        }
+
+        /* ===== PRESTASI ===== */
+        .prestasi-item {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            padding: 14px;
+            background: var(--bg-input);
+            border: 1px solid rgba(201, 168, 76, 0.2);
+            border-radius: var(--radius-md);
+            margin-bottom: 10px;
+        }
+
+        .prestasi-medali {
+            font-size: 32px;
+        }
+
+        .prestasi-nama {
+            font-size: 14px;
+            font-weight: 600;
+            color: var(--teks-utama);
+        }
+
+        .prestasi-tgl {
+            font-size: 11px;
+            color: var(--teks-sekunder);
+        }
+
+        /* ===== CATATAN GURU ===== */
+        #textarea-catatan {
+            width: 100%;
+            min-height: 160px;
+            padding: 14px;
+            background: var(--bg-input);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-md);
+            color: var(--teks-utama);
+            font-size: 13px;
+            font-family: var(--font-ui);
+            resize: vertical;
+            outline: none;
+            transition: var(--transisi);
+            line-height: 1.6;
+        }
+
+        #textarea-catatan:focus {
+            border-color: var(--emas);
+            box-shadow: 0 0 0 3px rgba(201, 168, 76, 0.1);
+        }
+
+        /* ===== DIVIDER ===== */
+        .divider {
+            height: 1px;
+            background: var(--border);
+            margin: 20px 0;
+        }
+
+        /* ===== SAPAAN WAKTU KUSTOM ===== */
+        .teks-emas {
+            color: var(--emas);
+        }
+
+        .teks-zamrud {
+            color: var(--zamrud);
+        }
+
+        .teks-merah {
+            color: #e74c3c;
+        }
+
+        .teks-abu {
+            color: var(--teks-sekunder);
+        }
+
+        /* ===== RESPONSIF SIDEBAR MOBILE ===== */
+        @media (max-width: 768px) {
+            .sidebar {
+                transform: translateX(-260px);
+                position: fixed;
+                z-index: var(--z-sidebar);
+                height: 100vh;
+            }
+
+            .sidebar.terbuka {
+                transform: translateX(0);
+            }
+
+            .overlay-sidebar {
+                position: fixed;
+                inset: 0;
+                background: rgba(0, 0, 0, 0.5);
+                z-index: calc(var(--z-sidebar) - 1);
+                display: none;
+            }
+
+            .overlay-sidebar.tampil {
+                display: block;
+            }
+        }
+
+        /* ===== SCAN KIOSK PUBLIC ===== */
+        .scan-kiosk-wrap {
+            position: fixed;
+            inset: 0;
+            background: rgba(4, 15, 11, 0.97);
+            backdrop-filter: blur(8px);
+            z-index: 500;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        .scan-kiosk-judul {
+            font-family: var(--font-arab);
+            font-size: 28px;
+            color: var(--emas);
+            text-align: center;
+        }
+
+        .scan-kiosk-sub {
+            font-size: 14px;
+            color: var(--teks-sekunder);
+            text-align: center;
+        }
+
+        /* ===== JADWAL ===== */
+        .jadwal-item {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            padding: 14px;
+            border: 1px solid var(--border);
+            border-radius: var(--radius-md);
+            margin-bottom: 8px;
+            background: var(--bg-input);
+            transition: var(--transisi);
+        }
+
+        .jadwal-item:hover {
+            border-color: var(--border-terang);
+        }
+
+        .jadwal-waktu {
+            font-size: 12px;
+            font-weight: 600;
+            color: var(--emas);
+            background: rgba(201, 168, 76, 0.08);
+            padding: 4px 10px;
+            border-radius: var(--radius-sm);
+            white-space: nowrap;
+        }
+
+        .jadwal-mapel {
+            font-size: 14px;
+            font-weight: 600;
+            color: var(--teks-utama);
+        }
+
+        .jadwal-kelas {
+            font-size: 12px;
+            color: var(--teks-sekunder);
+        }
+
+        /* ===== EMPTY STATE ===== */
+        .empty-state {
+            text-align: center;
+            padding: 40px;
+            color: var(--teks-redup);
+        }
+
+        .empty-state-ikon {
+            font-size: 48px;
+            margin-bottom: 12px;
+            opacity: 0.5;
+        }
+
+        .empty-state-teks {
+            font-size: 14px;
+        }
+
+        /* ===== LIVE INDICATOR ===== */
+        .indikator-live {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 11px;
+            font-weight: 600;
+            color: var(--zamrud);
+            text-transform: uppercase;
+        }
+
+        .titik-live {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: var(--zamrud);
+            animation: berdenyut 1.5s ease-in-out infinite;
+        }
+
+        @keyframes berdenyut {
+
+            0%,
+            100% {
+                opacity: 1;
+                transform: scale(1)
+            }
+
+            50% {
+                opacity: 0.5;
+                transform: scale(0.7)
+            }
+        }
+
+        /* ===== ANIMASI MASUK ELEMEN ===== */
+        .animasi-masuk {
+            animation: animasiMasuk 0.4s ease both;
+        }
+
+        @keyframes animasiMasuk {
+            from {
+                opacity: 0;
+                transform: translateY(12px)
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0)
+            }
+        }
+    </style>
+</head>
+
+<body>
+
+    <!-- ===== LOADING OVERLAY ===== -->
+    <div id="overlay-loading" class="tersembunyi">
+        <div class="spinner"></div>
+        <div class="loading-teks">بِسْمِ اللّٰهِ</div>
+        <div style="font-size:12px;color:var(--teks-sekunder)">Menyinkronkan data...</div>
+    </div>
+
+    <!-- ===== TOAST CONTAINER ===== -->
+    <div id="kontainer-toast"></div>
+
+    <!-- ===== HALAMAN LOGIN ===== -->
+    <div id="halaman-login">
+        <div class="pola-islami"></div>
+        <div class="login-dekorasi-kiri"></div>
+        <div class="login-dekorasi-kanan"></div>
+
+        <div class="kotak-login animasi-masuk">
+            <div class="login-logo-wrap">
+                <img src="https://raw.githubusercontent.com/gamesfaqih2025-byte/AL-KHIDMAT-DIGITAL/refs/heads/main/Desain%20tanpa%20judul.png"
+                    alt="Logo Al-Khidmat" class="login-logo-img" onerror="this.style.display='none'">
+                <div class="login-bismillah">بِسْمِ اللّٰهِ الرَّحْمٰنِ الرَّحِيْمِ</div>
+                <div class="login-nama-sistem">Al-Khidmat Digital</div>
+                <div class="login-subjudul">Sistem Manajemen Rumah Qur'an Digital</div>
+            </div>
+
+            <div class="form-grup">
+                <label class="form-label" for="input-id-login">ID Pengguna</label>
+                <input type="text" id="input-id-login" class="form-input"
+                    placeholder="admin / MUADDIB-001 / SANTRI-001">
+            </div>
+            <div class="form-grup">
+                <label class="form-label" for="input-pw-login">Kata Sandi</label>
+                <input type="password" id="input-pw-login" class="form-input" placeholder="Masukkan kata sandi">
+            </div>
+            <div id="login-error" class="login-error tersembunyi"></div>
+            <button class="btn-utama" onclick="prosesLogin()" style="margin-top:8px">
+                🕌 Bismillah — Masuk
+            </button>
+            <button class="btn-sekunder" onclick="bukaKioskScan()">
+                📷 Scan Kehadiran Cepat (Mode Kiosk)
+            </button>
+
+            <div style="margin-top:16px;text-align:center;font-size:11px;color:var(--teks-redup)">
+                Demo: admin / khidmatumat2026
+            </div>
+        </div>
+    </div>
+
+    <!-- ===== OVERLAY SIDEBAR MOBILE ===== -->
+    <div class="overlay-sidebar" id="overlay-sidebar" onclick="toggleSidebar()"></div>
+
+    <!-- ===== LAYOUT UTAMA ===== -->
+    <div id="layout-utama" class="tersembunyi">
+
+        <!-- SIDEBAR -->
+        <aside class="sidebar" id="sidebar">
+            <div class="sidebar-header">
+                <img src="https://raw.githubusercontent.com/gamesfaqih2025-byte/AL-KHIDMAT-DIGITAL/refs/heads/main/Desain%20tanpa%20judul.png"
+                    alt="Logo" class="sidebar-logo" onerror="this.style.background='var(--hijau-sedang)'">
+                <div class="sidebar-info">
+                    <div class="sidebar-nama">Al-Khidmat Digital</div>
+                    <div class="sidebar-sub">Rumah Qur'an Digital</div>
+                </div>
+            </div>
+
+            <nav class="sidebar-nav" id="sidebar-nav">
+                <!-- Diisi secara dinamis berdasarkan role -->
+            </nav>
+
+            <div class="sidebar-footer">
+                <div class="sidebar-profil">
+                    <div class="profil-avatar" id="profil-avatar-sidebar">A</div>
+                    <div>
+                        <div class="profil-nama" id="profil-nama-sidebar">Admin</div>
+                        <div class="profil-role" id="profil-role-sidebar">Manajemen</div>
+                    </div>
+                </div>
+            </div>
+        </aside>
+
+        <!-- AREA KONTEN -->
+        <div class="area-konten">
+            <!-- TOPBAR -->
+            <header class="topbar">
+                <div class="topbar-kiri">
+                    <button class="btn-toggle-sidebar" onclick="toggleSidebar()" title="Toggle Sidebar">☰</button>
+                    <div class="topbar-breadcrumb">
+                        <span id="topbar-halaman-aktif">Beranda</span>
+                    </div>
+                </div>
+                <div class="topbar-kanan">
+                    <div class="topbar-jam" id="topbar-jam">00:00:00</div>
+                    <button class="btn-topbar" onclick="toggleTema()" title="Ganti Tema" id="btn-tema">🌙</button>
+                    <button class="btn-logout" onclick="logout()">⬅ Keluar</button>
+                </div>
+            </header>
+
+            <!-- KONTEN UTAMA -->
+            <main class="konten-utama" id="konten-utama">
+
+                <!-- ========== HALAMAN: BERANDA ADMIN ========== -->
+                <section class="halaman" id="halaman-beranda-admin">
+                    <div class="sapaan-wrap">
+                        <div class="sapaan-bismillah">بِسْمِ اللّٰهِ الرَّحْمٰنِ الرَّحِيْمِ</div>
+                        <div class="sapaan-teks" id="teks-sapaan-admin">Selamat datang, <span>Admin</span>!</div>
+                        <div class="sapaan-tanggal" id="teks-tanggal-admin"></div>
+                        <div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap">
+                            <button class="btn btn-emas btn-sm" onclick="bukaModeDemo()">🎬 Mode Demo Scan</button>
+                            <button class="btn btn-outline btn-sm" onclick="navigasiKe('scan-guru')">📷 Scan
+                                Kehadiran</button>
+                        </div>
+                    </div>
+
+                    <div class="grid-statistik" id="grid-statistik-admin"></div>
+
+                    <div class="grid-2" style="margin-bottom:16px">
+                        <div class="kartu">
+                            <div class="kartu-judul">📊 Kehadiran 7 Hari Terakhir</div>
+                            <div class="chart-bar-wrap" id="chart-7-hari"></div>
+                            <div style="display:flex;justify-content:space-between;margin-top:8px"
+                                id="chart-label-7-hari"></div>
+                        </div>
+                        <div class="kartu">
+                            <div class="kartu-judul"
+                                style="display:flex;justify-content:space-between;align-items:center">
+                                <span>🔴 Live Monitor</span>
+                                <span class="indikator-live"><span class="titik-live"></span>LIVE</span>
+                            </div>
+                            <div id="live-monitor-mini" class="tabel-container">
+                                <div class="empty-state">
+                                    <div class="empty-state-ikon">📋</div>
+                                    <div class="empty-state-teks">Memuat data...</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="kartu">
+                        <div class="kartu-judul">⚡ Feed Aktivitas Terbaru</div>
+                        <div id="feed-aktivitas"></div>
+                    </div>
+                </section>
+
+                <!-- ========== HALAMAN: KEHADIRAN HARI INI (ADMIN) ========== -->
+                <section class="halaman" id="halaman-kehadiran-admin">
+                    <div class="halaman-header">
+                        <div>
+                            <div class="halaman-judul">📋 Kehadiran Hari Ini</div>
+                            <div class="halaman-subjudul" id="subjudul-kehadiran-admin"></div>
+                        </div>
+                        <div class="halaman-aksi">
+                            <input type="text" class="input-cari" id="cari-kehadiran" placeholder="🔍 Cari nama..."
+                                oninput="filterTabelKehadiran()">
+                        </div>
+                    </div>
+                    <div class="kartu">
+                        <div class="tabel-container">
+                            <table class="tabel-data" id="tabel-kehadiran-admin">
+                                <thead>
+                                    <tr>
+                                        <th>Nama</th>
+                                        <th>ID</th>
+                                        <th>Role</th>
+                                        <th>Jam Masuk</th>
+                                        <th>Jam Pulang</th>
+                                        <th>Durasi</th>
+                                        <th>Status</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="tbody-kehadiran-admin"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- ========== HALAMAN: LAPORAN (ADMIN) ========== -->
+                <section class="halaman" id="halaman-laporan-admin">
+                    <div class="halaman-header">
+                        <div>
+                            <div class="halaman-judul">📈 Laporan Kehadiran</div>
+                            <div class="halaman-subjudul">Rekap 14 hari kerja terakhir</div>
+                        </div>
+                        <div class="halaman-aksi">
+                            <button class="btn btn-outline btn-sm" onclick="cetakLaporan()">🖨️ Print</button>
+                            <button class="btn btn-primer btn-sm" onclick="eksporCSV()">📥 Export CSV</button>
+                        </div>
+                    </div>
+                    <div class="kartu">
+                        <div class="tabel-container">
+                            <table class="tabel-data" id="tabel-laporan">
+                                <thead>
+                                    <tr>
+                                        <th>Nama</th>
+                                        <th>Role</th>
+                                        <th>Total Hadir</th>
+                                        <th>Terlambat</th>
+                                        <th>Absen</th>
+                                        <th>% Kehadiran</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="tbody-laporan"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- ========== HALAMAN: DATA GURU (ADMIN) ========== -->
+                <section class="halaman" id="halaman-guru-admin">
+                    <div class="halaman-header">
+                        <div>
+                            <div class="halaman-judul">👨‍🏫 Data Guru / Muaddib</div>
+                            <div class="halaman-subjudul" id="subjudul-guru-count"></div>
+                        </div>
+                        <div class="halaman-aksi">
+                            <input type="text" class="input-cari" placeholder="🔍 Cari guru..." id="cari-guru"
+                                oninput="filterTabelGuru()">
+                            <button class="btn btn-emas btn-sm" onclick="bukaModalTambahGuru()">+ Tambah Guru</button>
+                        </div>
+                    </div>
+                    <div class="kartu">
+                        <div class="tabel-container">
+                            <table class="tabel-data" id="tabel-guru">
+                                <thead>
+                                    <tr>
+                                        <th>Kode ID</th>
+                                        <th>Nama</th>
+                                        <th>Mata Pelajaran</th>
+                                        <th>No. HP</th>
+                                        <th>Status</th>
+                                        <th>Aksi</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="tbody-guru"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- ========== HALAMAN: DATA MURID (ADMIN) ========== -->
+                <section class="halaman" id="halaman-murid-admin">
+                    <div class="halaman-header">
+                        <div>
+                            <div class="halaman-judul">👦 Data Murid / Santri</div>
+                            <div class="halaman-subjudul" id="subjudul-murid-count"></div>
+                        </div>
+                        <div class="halaman-aksi">
+                            <input type="text" class="input-cari" placeholder="🔍 Cari murid..." id="cari-murid"
+                                oninput="filterTabelMurid()">
+                            <button class="btn btn-emas btn-sm" onclick="bukaModalTambahMurid()">+ Tambah Murid</button>
+                        </div>
+                    </div>
+                    <div class="kartu">
+                        <div class="tabel-container">
+                            <table class="tabel-data" id="tabel-murid">
+                                <thead>
+                                    <tr>
+                                        <th>Kode ID</th>
+                                        <th>Nama</th>
+                                        <th>Kelas</th>
+                                        <th>Wali</th>
+                                        <th>Status</th>
+                                        <th>Aksi</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="tbody-murid"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- ========== HALAMAN: JADWAL (ADMIN) ========== -->
+                <section class="halaman" id="halaman-jadwal-admin">
+                    <div class="halaman-header">
+                        <div>
+                            <div class="halaman-judul">📅 Jadwal Pelajaran</div>
+                            <div class="halaman-subjudul">Manajemen jadwal harian</div>
+                        </div>
+                        <div class="halaman-aksi">
+                            <button class="btn btn-emas btn-sm" onclick="bukaModalTambahJadwal()">+ Tambah
+                                Jadwal</button>
+                        </div>
+                    </div>
+                    <div id="jadwal-per-hari"></div>
+                </section>
+
+                <!-- ========== HALAMAN: PENGATURAN (ADMIN) ========== -->
+                <section class="halaman" id="halaman-pengaturan-admin">
+                    <div class="halaman-header">
+                        <div>
+                            <div class="halaman-judul">⚙️ Pengaturan Sistem</div>
+                            <div class="halaman-subjudul">Konfigurasi madrasah dan sistem</div>
+                        </div>
+                    </div>
+                    <div class="grid-2">
+                        <div class="kartu">
+                            <div class="kartu-judul">🏫 Informasi Madrasah</div>
+                            <div class="form-pengaturan">
+                                <div><label class="form-label">Nama Madrasah</label>
+                                    <input type="text" class="form-input-pengaturan" id="set-nama-madrasah">
+                                </div>
+                                <div><label class="form-label">Tahun Ajaran</label>
+                                    <input type="text" class="form-input-pengaturan" id="set-tahun-ajaran">
+                                </div>
+                                <div class="form-grup-row">
+                                    <div><label class="form-label">Jam Masuk</label>
+                                        <input type="time" class="form-input-pengaturan" id="set-jam-masuk">
+                                    </div>
+                                    <div><label class="form-label">Jam Pulang</label>
+                                        <input type="time" class="form-input-pengaturan" id="set-jam-pulang">
+                                    </div>
+                                </div>
+                                <label class="checkbox-wrap">
+                                    <input type="checkbox" id="set-izin-manual">
+                                    <span class="checkbox-label">Izinkan input manual kode QR</span>
+                                </label>
+                                <button class="btn btn-primer" onclick="simpanPengaturan()">💾 Simpan
+                                    Pengaturan</button>
+                            </div>
+                        </div>
+                        <div class="kartu">
+                            <div class="kartu-judul">🔑 Ubah Password Default</div>
+                            <div class="form-pengaturan">
+                                <div><label class="form-label">Password Admin Baru</label>
+                                    <input type="password" class="form-input-pengaturan" id="set-pw-admin"
+                                        placeholder="Kosongkan jika tidak diubah">
+                                </div>
+                                <div><label class="form-label">Password Guru Baru</label>
+                                    <input type="password" class="form-input-pengaturan" id="set-pw-guru"
+                                        placeholder="Kosongkan jika tidak diubah">
+                                </div>
+                                <div><label class="form-label">Password Murid Baru</label>
+                                    <input type="password" class="form-input-pengaturan" id="set-pw-murid"
+                                        placeholder="Kosongkan jika tidak diubah">
+                                </div>
+                                <button class="btn btn-emas" onclick="simpanPassword()">🔐 Update Password</button>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="kartu" style="margin-top:16px;border-color:rgba(231,76,60,0.2)">
+                        <div class="kartu-judul">⚠️ Zona Berbahaya</div>
+                        <p style="font-size:13px;color:var(--teks-sekunder);margin-bottom:12px">Tindakan berikut tidak
+                            dapat dibatalkan. Harap berhati-hati.</p>
+                        <button class="btn btn-bahaya" onclick="konfirmasiResetData()">🗑️ Reset Semua Data</button>
+                    </div>
+                </section>
+
+                <!-- ========== HALAMAN: BERANDA GURU ========== -->
+                <section class="halaman" id="halaman-beranda-guru">
+                    <div class="sapaan-wrap">
+                        <div class="sapaan-bismillah">السَّلاَمُ عَلَيْكُمْ وَرَحْمَةُ اللهِ وَبَرَكَاتُهُ</div>
+                        <div class="sapaan-teks" id="teks-sapaan-guru">Ahlan wa Sahlan, <span>Ustadz</span>!</div>
+                        <div class="sapaan-tanggal" id="teks-tanggal-guru"></div>
+                        <div id="status-kehadiran-guru" class="sapaan-status-hadir"
+                            style="background:rgba(241,196,15,0.1);border:1px solid rgba(241,196,15,0.3);color:#f1c40f">
+                            ⏳ Belum Absen Hari Ini
+                        </div>
+                    </div>
+                    <div class="grid-2">
+                        <div class="kartu">
+                            <div class="kartu-judul">📅 Jadwal Mengajar Hari Ini</div>
+                            <div id="jadwal-guru-hari-ini"></div>
+                        </div>
+                        <div class="kartu">
+                            <div class="kartu-judul">🔒 Ganti Password</div>
+                            <div class="form-pengaturan">
+                                <div><label class="form-label">Password Lama</label>
+                                    <input type="password" class="form-input-pengaturan" id="guru-pw-lama"
+                                        placeholder="Password saat ini">
+                                </div>
+                                <div><label class="form-label">Password Baru</label>
+                                    <input type="password" class="form-input-pengaturan" id="guru-pw-baru"
+                                        placeholder="Password baru">
+                                </div>
+                                <button class="btn btn-primer btn-sm" onclick="gantiPasswordGuru()">💾 Simpan</button>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- ========== HALAMAN: SCAN GURU ========== -->
+                <section class="halaman" id="halaman-scan-guru">
+                    <div class="halaman-header">
+                        <div>
+                            <div class="halaman-judul">📷 Scan Kehadiran Santri</div>
+                            <div class="halaman-subjudul">Arahkan kamera ke QR Code Santri</div>
+                        </div>
+                    </div>
+                    <div class="grid-2">
+                        <div class="kartu">
+                            <div class="kartu-judul">📸 Kamera Scan</div>
+                            <div class="kamera-wrap">
+                                <video id="video-kamera" autoplay playsinline muted></video>
+                                <canvas id="canvas-kamera"></canvas>
+                                <div class="kamera-overlay">
+                                    <div class="kamera-bingkai">
+                                        <div class="kamera-scan-line"></div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="kamera-tips">Arahkan QR Code ke area bingkai kuning</div>
+                            <div style="display:flex;gap:8px;margin-top:12px;justify-content:center">
+                                <button class="btn btn-primer btn-sm" id="btn-mulai-kamera" onclick="mulaiKamera()">▶
+                                    Mulai Kamera</button>
+                                <button class="btn btn-outline btn-sm" id="btn-henti-kamera" onclick="hentiKamera()"
+                                    disabled>⏹ Hentikan</button>
+                            </div>
+                        </div>
+                        <div>
+                            <div class="kartu" id="kartu-input-manual">
+                                <div class="kartu-judul">✏️ Input Manual</div>
+                                <p style="font-size:12px;color:var(--teks-sekunder);margin-bottom:12px">Masukkan Kode ID
+                                    secara manual jika kamera tidak tersedia:</p>
+                                <div class="form-grup">
+                                    <label class="form-label">Kode ID Santri / Muaddib</label>
+                                    <input type="text" class="form-input" id="input-manual-id"
+                                        placeholder="Contoh: SANTRI-001">
+                                </div>
+                                <button class="btn btn-primer" style="width:100%" onclick="prosesManualScan()">✅ Rekam
+                                    Kehadiran</button>
+                            </div>
+                            <div class="kartu" style="margin-top:16px;">
+                                <div class="kartu-judul">📋 Kehadiran Tadi Hari</div>
+                                <div id="log-scan-hari-ini" style="max-height:200px;overflow-y:auto"></div>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- ========== HALAMAN: ID DIGITAL GURU ========== -->
+                <section class="halaman" id="halaman-id-guru">
+                    <div class="halaman-header">
+                        <div>
+                            <div class="halaman-judul">🪪 ID Digital</div>
+                            <div class="halaman-subjudul">Kartu identitas digital & QR Code</div>
+                        </div>
+                        <div class="halaman-aksi">
+                            <!-- Tombol cetak kartu dihapus sesuai permintaan -->
+                        </div>
+                    </div>
+                    <div class="kartu" style="max-width:380px;margin:0 auto">
+                        <div id="kartu-id-guru-wrap"></div>
+                    </div>
+                </section>
+
+                <!-- ========== HALAMAN: ID DIGITAL GURU ========== -->
+                <section class="halaman" id="halaman-id-guru">
+                    <div class="halaman-header">
+                        <div>
+                            <div class="halaman-judul">🪪 ID Digital</div>
+                            <div class="halaman-subjudul">Kartu identitas digital & QR Code</div>
+                        </div>
+                        <div class="halaman-aksi">
+                            <!-- Tombol cetak kartu dihapus sesuai permintaan -->
+                        </div>
+                    </div>
+
+                    <!-- Class "kartu" dihapus, sisa style margin untuk posisi tengah -->
+                    <div style="max-width:380px;margin:0 auto">
+                        <div id="kartu-id-guru-wrap"></div>
+                    </div>
+                </section>
+
+                <!-- ========== HALAMAN: CATATAN GURU ========== -->
+                <section class="halaman" id="halaman-catatan-guru">
+                    <div class="halaman-header">
+                        <div>
+                            <div class="halaman-judul">📝 Jurnal Harian</div>
+                            <div class="halaman-subjudul" id="subjudul-catatan-guru"></div>
+                        </div>
+                        <div class="halaman-aksi">
+                            <span id="status-simpan-catatan" style="font-size:12px;color:var(--teks-redup)">Tersimpan
+                                otomatis</span>
+                        </div>
+                    </div>
+                    <div class="kartu">
+                        <textarea id="textarea-catatan"
+                            placeholder="Tulis catatan atau refleksi harian di sini...&#10;&#10;بِسْمِ اللّٰهِ الرَّحْمٰنِ الرَّحِيْمِ"></textarea>
+                        <div style="display:flex;justify-content:flex-end;margin-top:12px">
+                            <button class="btn btn-primer btn-sm" onclick="simpanCatatan()">💾 Simpan Catatan</button>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- ========== HALAMAN: BERANDA MURID ========== -->
+                <section class="halaman" id="halaman-beranda-murid">
+                    <div class="sapaan-wrap">
+                        <div class="sapaan-bismillah">بِسْمِ اللّٰهِ الرَّحْمٰنِ الرَّحِيْمِ</div>
+                        <div class="sapaan-teks" id="teks-sapaan-murid">Ahlan, <span>Santri</span>!</div>
+                        <div class="sapaan-tanggal" id="teks-tanggal-murid"></div>
+                    </div>
+                    <div class="grid-2" style="margin-bottom:16px">
+                        <div class="kartu"
+                            style="display:flex;flex-direction:column;align-items:center;justify-content:center;padding:28px">
+                            <div class="kartu-judul" style="width:100%;justify-content:flex-start">📊 Kehadiran Bulan
+                                Ini</div>
+                            <div class="progress-ring-wrap">
+                                <svg width="120" height="120" class="progress-ring-svg" id="ring-kehadiran-murid">
+                                    <circle cx="60" cy="60" r="50" fill="none" stroke="var(--border)"
+                                        stroke-width="10" />
+                                    <circle cx="60" cy="60" r="50" fill="none" stroke="url(#gradRing)" stroke-width="10"
+                                        stroke-linecap="round" class="progress-ring-circle" id="ring-circle-murid"
+                                        stroke-dasharray="314" stroke-dashoffset="314" />
+                                    <defs>
+                                        <linearGradient id="gradRing" x1="0%" y1="0%" x2="100%" y2="0%">
+                                            <stop offset="0%" stop-color="#2ecc71" />
+                                            <stop offset="100%" stop-color="#c9a84c" />
+                                        </linearGradient>
+                                    </defs>
+                                    <text x="60" y="56" class="progress-ring-teks" fill="var(--teks-utama)"
+                                        font-size="18" font-weight="700" font-family="Poppins"
+                                        id="ring-persen-murid">0%</text>
+                                    <text x="60" y="72" class="progress-ring-teks" fill="var(--teks-sekunder)"
+                                        font-size="10" font-family="Poppins">Kehadiran</text>
+                                </svg>
+                            </div>
+                        </div>
+                        <div class="kartu">
+                            <div class="kartu-judul">📅 Jadwal Hari Ini</div>
+                            <div id="jadwal-murid-hari-ini"></div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- ========== HALAMAN: KALENDER KEHADIRAN MURID ========== -->
+                <section class="halaman" id="halaman-kalender-murid">
+                    <div class="halaman-header">
+                        <div>
+                            <div class="halaman-judul">📅 Riwayat Kehadiran Saya</div>
+                            <div class="halaman-subjudul" id="subjudul-kalender-murid"></div>
+                        </div>
+                    </div>
+                    <div class="kartu">
+                        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
+                            <button class="btn btn-outline btn-sm" onclick="navigasiKalender(-1)">◀ Bulan Lalu</button>
+                            <div style="font-size:14px;font-weight:600;color:var(--teks-utama)"
+                                id="label-bulan-kalender"></div>
+                            <button class="btn btn-outline btn-sm" onclick="navigasiKalender(1)">Bulan Depan ▶</button>
+                        </div>
+                        <div class="kalender-grid" id="kalender-grid-murid"></div>
+                        <div class="kalender-legenda">
+                            <div class="legenda-item">
+                                <div class="legenda-warna" style="background:rgba(46,204,113,0.3)"></div>Hadir
+                            </div>
+                            <div class="legenda-item">
+                                <div class="legenda-warna" style="background:rgba(231,76,60,0.3)"></div>Absen
+                            </div>
+                            <div class="legenda-item">
+                                <div class="legenda-warna" style="background:rgba(241,196,15,0.3)"></div>Sakit
+                            </div>
+                            <div class="legenda-item">
+                                <div class="legenda-warna" style="background:rgba(52,152,219,0.3)"></div>Izin
+                            </div>
+                            <div class="legenda-item">
+                                <div class="legenda-warna" style="background:var(--bg-input)"></div>Libur
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- ========== HALAMAN: TUGAS MURID ========== -->
+                <section class="halaman" id="halaman-tugas-murid">
+                    <div class="halaman-header">
+                        <div>
+                            <div class="halaman-judul">📚 Tugas & PR</div>
+                            <div class="halaman-subjudul">Daftar tugas dan pekerjaan rumah</div>
+                        </div>
+                    </div>
+                    <div id="daftar-tugas-murid"></div>
+                </section>
+
+                <!-- ========== HALAMAN: PRESTASI MURID ========== -->
+                <section class="halaman" id="halaman-prestasi-murid">
+                    <div class="halaman-header">
+                        <div>
+                            <div class="halaman-judul">🏆 Prestasi Saya</div>
+                            <div class="halaman-subjudul">Pencapaian dan penghargaan</div>
+                        </div>
+                    </div>
+                    <div id="daftar-prestasi-murid"></div>
+                </section>
+
+            </main>
+        </div>
+    </div>
+
+    <!-- ===== MODAL UNIVERSAL ===== -->
+    <div class="overlay-modal tersembunyi" id="overlay-modal-utama" onclick="tutupModalUtama(event)">
+        <div class="kotak-modal" id="kotak-modal-utama" onclick="event.stopPropagation()">
+            <div class="modal-header">
+                <div class="modal-judul" id="judul-modal-utama">Modal</div>
+                <button class="btn-tutup-modal" onclick="tutupModalUtama()">✕</button>
+            </div>
+            <div id="isi-modal-utama"></div>
+        </div>
+    </div>
+
+    <!-- ===== MODE KIOSK SCAN ===== -->
+    <div id="kiosk-scan-wrap" class="tersembunyi scan-kiosk-wrap">
+        <div class="pola-islami"></div>
+        <div class="scan-kiosk-judul">بِسْمِ اللّٰهِ الرَّحْمٰنِ الرَّحِيْمِ</div>
+        <div class="scan-kiosk-sub">Scan QR Code untuk mencatat kehadiran</div>
+        <div class="kamera-wrap" style="width:min(90vw,400px)">
+            <video id="video-kiosk" autoplay playsinline muted></video>
+            <canvas id="canvas-kiosk"></canvas>
+            <div class="kamera-overlay">
+                <div class="kamera-bingkai">
+                    <div class="kamera-scan-line"></div>
+                </div>
+            </div>
+        </div>
+        <div style="display:flex;gap:12px;margin-top:8px">
+            <button class="btn btn-primer" onclick="mulaiKiosk()">▶ Mulai Scan</button>
+            <button class="btn btn-bahaya" onclick="tutupKiosk()">✕ Tutup</button>
+        </div>
+    </div>
+
+    <script>
+        // ============================================================
+        // KONFIGURASI SUPABASE
+        // ============================================================
+        const SUPABASE_URL = 'https://iwzdcumjmvqgbpqhcwlx.supabase.co';
+        const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Iml3emRjdW1qbXZxZ2JwcWhjd2x4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzgwMDI0MjQsImV4cCI6MjA5MzU3ODQyNH0.b3iaGt_Vd8Kzwtzrwrc0LONarGX5wp5O7ZbiwEj76UA';
+
+        let supabaseClient = null;
+        try {
+            supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+        } catch (e) { console.warn('Supabase init gagal:', e); }
+
+        // ============================================================
+        // STATE APLIKASI
+        // ============================================================
+        let pengguna = null; // pengguna yang sedang login
+        let appState = {
+            pengaturan: {
+                namaMadrasah: 'Rumah Qur\'an Al-Khidmat',
+                tahunAjaran: '1446/1447 H',
+                jamMasuk: '07:00',
+                jamPulang: '13:00',
+                izinManual: true,
+                passwordAdmin: 'khidmatumat2026',
+                passwordGuru: 'adabdulubaruilmu',
+                passwordMurid: 'murojaahtiadahenti',
+            },
+            guru: [],
+            murid: [],
+            jadwal: [],
+            kehadiran: [], // [{id, penggunaId, nama, role, tanggal, jamMasuk, jamPulang}]
+            catatan: {}, // {guruId: "teks catatan"}
+        };
+        let intervalJam = null;
+        let streamKamera = null;
+        let intervalScan = null;
+        let streamKiosk = null;
+        let intervalScanKiosk = null;
+        let bulanKalender = new Date().getMonth();
+        let tahunKalender = new Date().getFullYear();
+
+        // ============================================================
+        // SUPABASE WRAPPER
+        // ============================================================
+        async function simpanKeCloud(kunci, nilai) {
+            localStorage.setItem('akd_' + kunci, JSON.stringify(nilai));
+            if (!supabaseClient) return;
+            try {
+                await supabaseClient.from('app_state').upsert({ key: kunci, data_json: JSON.stringify(nilai) }, { onConflict: 'key' });
+            } catch (e) { /* fallback offline */ }
+        }
+
+        async function ambilDariCloud(kunci) {
+            if (supabaseClient) {
+                try {
+                    const { data } = await supabaseClient.from('app_state').select('data_json').eq('key', kunci).single();
+                    if (data) {
+                        const parsed = JSON.parse(data.data_json);
+                        localStorage.setItem('akd_' + kunci, JSON.stringify(parsed));
+                        return parsed;
+                    }
+                } catch (e) { /* fallback ke lokal */ }
+            }
+            const lokal = localStorage.getItem('akd_' + kunci);
+            return lokal ? JSON.parse(lokal) : null;
+        }
+
+        async function inisialisasiData() {
+            tampilLoading(true);
+            try {
+                const dataCloud = await ambilDariCloud('appState');
+                if (dataCloud && dataCloud.guru && dataCloud.guru.length > 0) {
+                    appState = { ...appState, ...dataCloud };
+                } else {
+                    buatDataDummy();
+                    await simpanKeCloud('appState', appState);
+                }
+            } catch (e) {
+                buatDataDummy();
+            }
+            tampilLoading(false);
+        }
+
+        async function simpanState() {
+            await simpanKeCloud('appState', appState);
+        }
+
+        // ============================================================
+        // DATA DUMMY GENERATOR (DIKOSONGKAN UNTUK MULAI BERSIH)
+        // ============================================================
+        function buatDataDummy() {
+            appState.guru = [];
+            appState.murid = [];
+            appState.jadwal = [];
+            appState.kehadiran = [];
+        }
+
+        // ============================================================
+        // UTILITAS
+        // ============================================================
+        function formatTanggal(tgl = new Date()) {
+            return tgl.toISOString().split('T')[0];
+        }
+        function formatWaktu(date = new Date()) {
+            return date.toTimeString().substr(0, 5);
+        }
+        function sapaaWaktu() {
+            const jam = new Date().getHours();
+            if (jam < 12) return 'Selamat Pagi';
+            if (jam < 15) return 'Selamat Siang';
+            if (jam < 18) return 'Selamat Sore';
+            return 'Selamat Malam';
+        }
+        function namaHari() {
+            return new Date().toLocaleDateString('id-ID', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+        }
+        function hariInggris() {
+            return new Date().toLocaleDateString('en-US', { weekday: 'long' });
+        }
+        function tampilLoading(tampil) {
+            document.getElementById('overlay-loading').classList.toggle('tersembunyi', !tampil);
+        }
+        function tampilToast(pesan, tipe = 'sukses') {
+            const kontainer = document.getElementById('kontainer-toast');
+            const toast = document.createElement('div');
+            const ikon = { sukses: '✅', error: '❌', info: 'ℹ️', peringatan: '⚠️' }[tipe] || 'ℹ️';
+            toast.className = `toast toast-${tipe}`;
+            toast.innerHTML = `<span>${ikon}</span><span>${pesan}</span>`;
+            kontainer.appendChild(toast);
+            setTimeout(() => {
+                toast.classList.add('keluar');
+                setTimeout(() => toast.remove(), 300);
+            }, 3000);
+        }
+        function hitungDurasi(masuk, pulang) {
+            if (!masuk || !pulang) return '-';
+            const [jm, mm] = masuk.split(':').map(Number);
+            const [jp, mp] = pulang.split(':').map(Number);
+            const menit = (jp * 60 + mp) - (jm * 60 + mm);
+            if (menit < 0) return '-';
+            return `${Math.floor(menit / 60)}j ${menit % 60}m`;
+        }
+        function generateId(prefix) {
+            const num = String(Math.floor(Math.random() * 900) + 100);
+            return `${prefix}-${num}`;
+        }
+
+        // ============================================================
+        // AUTENTIKASI
+        // ============================================================
+        function prosesLogin() {
+            const id = document.getElementById('input-id-login').value.trim();
+            const pw = document.getElementById('input-pw-login').value;
+            const err = document.getElementById('login-error');
+
+            if (!id || !pw) {
+                err.textContent = 'ID dan password tidak boleh kosong.';
+                err.classList.remove('tersembunyi'); return;
+            }
+
+            // Cek Admin
+            if (id === 'admin' && pw === appState.pengaturan.passwordAdmin) {
+                pengguna = { id: 'admin', nama: 'Administrator', role: 'admin', display: 'Manajemen' };
+                masukAplikasi();
+                return;
+            }
+            // Cek Guru
+            const guru = appState.guru.find(g => g.id === id);
+            if (guru && (pw === (guru.password || appState.pengaturan.passwordGuru))) {
+                pengguna = { id: guru.id, nama: guru.nama, role: 'guru', display: 'Guru / Muaddib', data: guru };
+                masukAplikasi();
+                return;
+            }
+            // Cek Murid
+            const murid = appState.murid.find(m => m.id === id);
+            if (murid && (pw === (murid.password || appState.pengaturan.passwordMurid))) {
+                pengguna = { id: murid.id, nama: murid.nama, role: 'murid', display: 'Murid / Santri', data: murid };
+                masukAplikasi();
+                return;
+            }
+
+            err.textContent = 'ID atau password salah. Silakan coba lagi.';
+            err.classList.remove('tersembunyi');
+        }
+        document.getElementById('input-pw-login').addEventListener('keydown', e => { if (e.key === 'Enter') prosesLogin(); });
+
+        function masukAplikasi() {
+            document.getElementById('halaman-login').classList.add('tersembunyi');
+            document.getElementById('layout-utama').classList.remove('tersembunyi');
+            setupSidebar();
+            setupProfil();
+            jalankanJam();
+            const halamanAwal = { admin: 'beranda-admin', guru: 'beranda-guru', murid: 'beranda-murid' }[pengguna.role];
+            navigasiKe(halamanAwal);
+        }
+
+        function logout() {
+            pengguna = null;
+            clearInterval(intervalJam);
+            hentiKamera();
+            document.getElementById('layout-utama').classList.add('tersembunyi');
+            document.getElementById('halaman-login').classList.remove('tersembunyi');
+            document.getElementById('input-id-login').value = '';
+            document.getElementById('input-pw-login').value = '';
+            document.getElementById('login-error').classList.add('tersembunyi');
+        }
+
+        // ============================================================
+        // NAVIGASI & SIDEBAR
+        // ============================================================
+        const MENU_ADMIN = [
+            {
+                label: 'Utama', items: [
+                    { id: 'beranda-admin', ikon: '🏠', teks: 'Beranda' },
+                    { id: 'kehadiran-admin', ikon: '📋', teks: 'Kehadiran Hari Ini' },
+                    { id: 'laporan-admin', ikon: '📈', teks: 'Laporan' },
+                ]
+            },
+            {
+                label: 'Data', items: [
+                    { id: 'guru-admin', ikon: '👨‍🏫', teks: 'Data Guru' },
+                    { id: 'murid-admin', ikon: '👦', teks: 'Data Murid' },
+                    { id: 'jadwal-admin', ikon: '📅', teks: 'Jadwal' },
+                ]
+            },
+            {
+                label: 'Sistem', items: [
+                    { id: 'scan-guru', ikon: '📷', teks: 'Scan Kehadiran' },
+                    { id: 'pengaturan-admin', ikon: '⚙️', teks: 'Pengaturan' },
+                ]
+            },
+        ];
+        const MENU_GURU = [
+            {
+                label: 'Utama', items: [
+                    { id: 'beranda-guru', ikon: '🏠', teks: 'Beranda' },
+                    { id: 'scan-guru', ikon: '📷', teks: 'Scan Kehadiran' },
+                    { id: 'id-guru', ikon: '🪪', teks: 'ID Digital' },
+                ]
+            },
+            {
+                label: 'Murid', items: [
+                    { id: 'dhabit-guru', ikon: '📊', teks: 'Dhabit Murid' },
+                ]
+            },
+            {
+                label: 'Personal', items: [
+                    { id: 'catatan-guru', ikon: '📝', teks: 'Catatan Harian' },
+                ]
+            },
+        ];
+        const MENU_MURID = [
+            {
+                label: 'Utama', items: [
+                    { id: 'beranda-murid', ikon: '🏠', teks: 'Beranda' },
+                    { id: 'kalender-murid', ikon: '📅', teks: 'Kehadiran Saya' },
+                ]
+            },
+            {
+                label: 'Akademik', items: [
+                    { id: 'tugas-murid', ikon: '📚', teks: 'Tugas & PR' },
+                    { id: 'prestasi-murid', ikon: '🏆', teks: 'Prestasi' },
+                ]
+            },
+        ];
+
+        function setupSidebar() {
+            const nav = document.getElementById('sidebar-nav');
+            const menu = { admin: MENU_ADMIN, guru: MENU_GURU, murid: MENU_MURID }[pengguna.role];
+            nav.innerHTML = menu.map(grup => `
+    <div class="nav-grup-label">${grup.label}</div>
+    ${grup.items.map(item => `
+      <div class="nav-item" id="nav-${item.id}" onclick="navigasiKe('${item.id}')">
+        <span class="nav-ikon">${item.ikon}</span>
+        <span>${item.teks}</span>
+      </div>
+    `).join('')}
+  `).join('');
+        }
+
+        function setupProfil() {
+            document.getElementById('profil-nama-sidebar').textContent = pengguna.nama;
+            document.getElementById('profil-role-sidebar').textContent = pengguna.display;
+            document.getElementById('profil-avatar-sidebar').textContent = pengguna.nama.charAt(0).toUpperCase();
+        }
+
+        function navigasiKe(halamanId) {
+            // Sembunyikan semua halaman
+            document.querySelectorAll('.halaman').forEach(h => h.classList.remove('aktif'));
+            document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('aktif'));
+            // Tampilkan halaman yang dipilih
+            const el = document.getElementById('halaman-' + halamanId);
+            if (el) el.classList.add('aktif');
+            const nav = document.getElementById('nav-' + halamanId);
+            if (nav) nav.classList.add('aktif');
+            // Update topbar
+            const allMenu = [...MENU_ADMIN, ...MENU_GURU, ...MENU_MURID].flatMap(g => g.items);
+            const item = allMenu.find(i => i.id === halamanId);
+            document.getElementById('topbar-halaman-aktif').textContent = item ? item.ikon + ' ' + item.teks : 'Beranda';
+            // Load konten halaman
+            loadHalaman(halamanId);
+            // Tutup sidebar di mobile
+            if (window.innerWidth <= 768) {
+                document.getElementById('sidebar').classList.remove('terbuka');
+                document.getElementById('overlay-sidebar').classList.remove('tampil');
+            }
+        }
+
+        function toggleSidebar() {
+            if (window.innerWidth <= 768) {
+                document.getElementById('sidebar').classList.toggle('terbuka');
+                document.getElementById('overlay-sidebar').classList.toggle('tampil');
+            } else {
+                document.getElementById('sidebar').classList.toggle('tertutup');
+            }
+        }
+
+        // ============================================================
+        // LOAD KONTEN HALAMAN
+        // ============================================================
+        function loadHalaman(id) {
+            switch (id) {
+                case 'beranda-admin': loadBerandaAdmin(); break;
+                case 'kehadiran-admin': loadKehadiranAdmin(); break;
+                case 'laporan-admin': loadLaporanAdmin(); break;
+                case 'guru-admin': loadDataGuru(); break;
+                case 'murid-admin': loadDataMurid(); break;
+                case 'jadwal-admin': loadJadwalAdmin(); break;
+                case 'pengaturan-admin': loadPengaturanAdmin(); break;
+                case 'beranda-guru': loadBerandaGuru(); break;
+                case 'scan-guru': loadScanGuru(); break;
+                case 'id-guru': loadIdGuru(); break;
+                case 'dhabit-guru': loadDhabitGuru(); break;
+                case 'catatan-guru': loadCatatanGuru(); break;
+                case 'beranda-murid': loadBerandaMurid(); break;
+                case 'kalender-murid': loadKalenderMurid(); break;
+                case 'tugas-murid': loadTugasMurid(); break;
+                case 'prestasi-murid': loadPrestasiMurid(); break;
+            }
+        }
+
+        // ============================================================
+        // BERANDA ADMIN
+        // ============================================================
+        function loadBerandaAdmin() {
+            const tgl = formatTanggal();
+            document.getElementById('teks-sapaan-admin').innerHTML = `${sapaaWaktu()}, <span>Administrator</span>!`;
+            document.getElementById('teks-tanggal-admin').textContent = namaHari();
+
+            const guru = appState.guru.length;
+            const murid = appState.murid.length;
+            const hadirGuru = appState.kehadiran.filter(k => k.tanggal === tgl && k.role === 'guru').length;
+            const hadirMurid = appState.kehadiran.filter(k => k.tanggal === tgl && k.role === 'murid').length;
+            const absen = (guru + murid) - hadirGuru - hadirMurid;
+
+            document.getElementById('grid-statistik-admin').innerHTML = `
+    <div class="kartu-stat stat-biru animasi-masuk">
+      <div class="kartu-stat-ikon">👨‍🏫</div>
+      <div class="kartu-stat-nilai">${guru}</div>
+      <div class="kartu-stat-label">Total Guru</div>
+    </div>
+    <div class="kartu-stat stat-ungu animasi-masuk" style="animation-delay:.05s">
+      <div class="kartu-stat-ikon">🎓</div>
+      <div class="kartu-stat-nilai">${murid}</div>
+      <div class="kartu-stat-label">Total Santri</div>
+    </div>
+    <div class="kartu-stat stat-hijau animasi-masuk" style="animation-delay:.1s">
+      <div class="kartu-stat-ikon">✅</div>
+      <div class="kartu-stat-nilai">${hadirGuru + hadirMurid}</div>
+      <div class="kartu-stat-label">Hadir Hari Ini</div>
+    </div>
+    <div class="kartu-stat stat-merah animasi-masuk" style="animation-delay:.15s">
+      <div class="kartu-stat-ikon">❌</div>
+      <div class="kartu-stat-nilai">${absen}</div>
+      <div class="kartu-stat-label">Belum Hadir</div>
+    </div>
+  `;
+
+            // Chart 7 hari
+            const hariBulan = [];
+            const nilaiHari = [];
+            for (let i = 6; i >= 0; i--) {
+                const t = new Date(); t.setDate(t.getDate() - i);
+                if (t.getDay() === 0 || t.getDay() === 6) continue;
+                const ts = formatTanggal(t);
+                hariBulan.push(t.toLocaleDateString('id-ID', { weekday: 'short' }));
+                nilaiHari.push(appState.kehadiran.filter(k => k.tanggal === ts).length);
+            }
+            const maks = Math.max(...nilaiHari, 1);
+            document.getElementById('chart-7-hari').innerHTML = nilaiHari.map((n, i) => `
+    <div class="chart-kolom">
+      <div class="chart-bar-visual" style="height:${Math.max(10, (n / maks) * 100)}%">
+        <div class="chart-bar-nilai">${n}</div>
+      </div>
+    </div>
+  `).join('');
+            document.getElementById('chart-label-7-hari').innerHTML = hariBulan.map(h =>
+                `<div style="font-size:10px;color:var(--teks-redup);text-align:center;flex:1">${h}</div>`
+            ).join('');
+
+            // Live monitor mini
+            const hadirHariIni = appState.kehadiran.filter(k => k.tanggal === tgl).slice(-5).reverse();
+            if (hadirHariIni.length === 0) {
+                document.getElementById('live-monitor-mini').innerHTML = `<div class="empty-state"><div class="empty-state-ikon">📋</div><div class="empty-state-teks">Belum ada kehadiran hari ini</div></div>`;
+            } else {
+                document.getElementById('live-monitor-mini').innerHTML = `
+      <table class="tabel-data">
+        <thead><tr><th>Nama</th><th>Masuk</th><th>Status</th></tr></thead>
+        <tbody>
+          ${hadirHariIni.map(k => `
+            <tr>
+              <td>${k.nama}</td>
+              <td><span class="badge badge-emas">${k.jamMasuk}</span></td>
+              <td><span class="badge ${k.role === 'guru' ? 'badge-biru' : 'badge-hijau'}">${k.role === 'guru' ? 'Guru' : 'Santri'}</span></td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>
+    `;
+            }
+
+            // Feed aktivitas
+            const aktivitas = appState.kehadiran.slice(-8).reverse();
+            document.getElementById('feed-aktivitas').innerHTML = aktivitas.length ? aktivitas.map(k => `
+    <div class="feed-item">
+      <div class="feed-ikon" style="background:${k.role === 'guru' ? 'rgba(52,152,219,0.1)' : 'rgba(46,204,113,0.1)'}">
+        ${k.role === 'guru' ? '👨‍🏫' : '📖'}
+      </div>
+      <div class="feed-konten">
+        <div class="feed-nama">${k.nama}</div>
+        <div class="feed-aksi">${k.jamPulang ? 'Telah pulang' : 'Hadir — Jam Masuk'}: ${k.jamMasuk}</div>
+        <div class="feed-waktu">${k.tanggal}</div>
+      </div>
+    </div>
+  `).join('') : '<div class="empty-state"><div class="empty-state-teks">Belum ada aktivitas</div></div>';
+        }
+
+        // ============================================================
+        // KEHADIRAN HARI INI
+        // ============================================================
+        function loadKehadiranAdmin() {
+            const tgl = formatTanggal();
+            document.getElementById('subjudul-kehadiran-admin').textContent = namaHari();
+            renderTabelKehadiran(tgl);
+        }
+
+        function renderTabelKehadiran(tgl, filter = '') {
+            const semua = [...appState.guru, ...appState.murid];
+            let rows = semua.filter(o => !filter || o.nama.toLowerCase().includes(filter.toLowerCase()));
+            const tbody = document.getElementById('tbody-kehadiran-admin');
+            tbody.innerHTML = rows.map(orang => {
+                const k = appState.kehadiran.find(x => x.tanggal === tgl && x.penggunaId === orang.id);
+                return `<tr>
+      <td>${orang.nama}</td>
+      <td><code style="font-size:11px;color:var(--emas)">${orang.id}</code></td>
+      <td><span class="badge ${orang.id.startsWith('SANTRI') ? 'badge-hijau' : 'badge-biru'}">${orang.id.startsWith('SANTRI') ? 'Santri' : 'Guru'}</span></td>
+      <td>${k ? `<span class="badge badge-emas">${k.jamMasuk}</span>` : '<span class="badge badge-abu">—</span>'}</td>
+      <td>${k?.jamPulang ? `<span class="badge badge-biru">${k.jamPulang}</span>` : '<span class="badge badge-abu">—</span>'}</td>
+      <td>${k ? hitungDurasi(k.jamMasuk, k.jamPulang) : '—'}</td>
+      <td><span class="badge ${k ? 'badge-hijau' : 'badge-merah'}">${k ? '✅ Hadir' : '❌ Absen'}</span></td>
+    </tr>`;
+            }).join('');
+        }
+
+        function filterTabelKehadiran() {
+            renderTabelKehadiran(formatTanggal(), document.getElementById('cari-kehadiran').value);
+        }
+
+        // ============================================================
+        // LAPORAN
+        // ============================================================
+        function loadLaporanAdmin() {
+            const semua = [...appState.guru, ...appState.murid];
+            // Hitung tanggal kerja 14 hari ke belakang
+            const tglKerja = [];
+            for (let i = 13; i >= 0; i--) {
+                const t = new Date(); t.setDate(t.getDate() - i);
+                if (t.getDay() !== 0 && t.getDay() !== 6) tglKerja.push(formatTanggal(t));
+            }
+            const tbody = document.getElementById('tbody-laporan');
+            tbody.innerHTML = semua.map(orang => {
+                const hadirArr = tglKerja.filter(tgl => appState.kehadiran.find(k => k.tanggal === tgl && k.penggunaId === orang.id));
+                const terlambat = hadirArr.filter(tgl => {
+                    const k = appState.kehadiran.find(x => x.tanggal === tgl && x.penggunaId === orang.id);
+                    return k && k.jamMasuk > appState.pengaturan.jamMasuk;
+                }).length;
+                const absen = tglKerja.length - hadirArr.length;
+                const persen = Math.round((hadirArr.length / tglKerja.length) * 100);
+                const warnaP = persen >= 80 ? 'badge-hijau' : persen >= 60 ? 'badge-kuning' : 'badge-merah';
+                return `<tr>
+      <td>${orang.nama}</td>
+      <td><span class="badge ${orang.id.startsWith('SANTRI') ? 'badge-hijau' : 'badge-biru'}">${orang.id.startsWith('SANTRI') ? 'Santri' : 'Guru'}</span></td>
+      <td><strong>${hadirArr.length}</strong>/${tglKerja.length}</td>
+      <td>${terlambat}</td>
+      <td>${absen}</td>
+      <td><span class="badge ${warnaP}">${persen}%</span></td>
+    </tr>`;
+            }).join('');
+        }
+
+        function cetakLaporan() { window.print(); tampilToast('Membuka dialog cetak...', 'info'); }
+        function eksporCSV() {
+            const semua = [...appState.guru, ...appState.murid];
+            const tglKerja = [];
+            for (let i = 13; i >= 0; i--) {
+                const t = new Date(); t.setDate(t.getDate() - i);
+                if (t.getDay() !== 0 && t.getDay() !== 6) tglKerja.push(formatTanggal(t));
+            }
+            let csv = 'Nama,Role,Hadir,Absen,Persen\n';
+            semua.forEach(orang => {
+                const hadir = tglKerja.filter(tgl => appState.kehadiran.find(k => k.tanggal === tgl && k.penggunaId === orang.id)).length;
+                const persen = Math.round((hadir / tglKerja.length) * 100);
+                csv += `${orang.nama},${orang.id.startsWith('SANTRI') ? 'Santri' : 'Guru'},${hadir},${tglKerja.length - hadir},${persen}%\n`;
+            });
+            const blob = new Blob([csv], { type: 'text/csv' });
+            const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
+            a.download = `laporan-kehadiran-${formatTanggal()}.csv`; a.click();
+            tampilToast('File CSV berhasil diunduh!', 'sukses');
+        }
+
+        // ============================================================
+        // DATA GURU
+        // ============================================================
+        function loadDataGuru() {
+            document.getElementById('subjudul-guru-count').textContent = `${appState.guru.length} guru terdaftar`;
+            renderTabelGuru();
+        }
+        function renderTabelGuru(filter = '') {
+            const data = appState.guru.filter(g => !filter || g.nama.toLowerCase().includes(filter.toLowerCase()));
+            document.getElementById('tbody-guru').innerHTML = data.map(g => `
+    <tr>
+      <td><code style="color:var(--emas);font-size:12px">${g.id}</code></td>
+      <td><strong>${g.nama}</strong></td>
+      <td>${g.mapel}</td>
+      <td>${g.hp}</td>
+      <td><span class="badge badge-hijau">${g.status}</span></td>
+      <td>
+        <div style="display:flex;gap:4px">
+          <button class="btn btn-outline btn-sm" onclick="cetakQRGuru('${g.id}')">🖨️ QR</button>
+          <button class="btn btn-bahaya btn-sm" onclick="hapusGuru('${g.id}')">🗑️</button>
+        </div>
+      </td>
+    </tr>
+  `).join('') || '<tr><td colspan="6" style="text-align:center;color:var(--teks-redup)">Tidak ada data</td></tr>';
+        }
+        function filterTabelGuru() { renderTabelGuru(document.getElementById('cari-guru').value); }
+
+        function bukaModalTambahGuru() {
+            document.getElementById('judul-modal-utama').textContent = '➕ Tambah Guru Baru';
+            document.getElementById('isi-modal-utama').innerHTML = `
+    <div class="form-pengaturan">
+      <div><label class="form-label">Nama Lengkap</label>
+        <input type="text" class="form-input-pengaturan" id="modal-guru-nama" placeholder="Nama lengkap guru"></div>
+      <div><label class="form-label">Mata Pelajaran</label>
+        <input type="text" class="form-input-pengaturan" id="modal-guru-mapel" placeholder="Tahfidz, Bahasa Arab, dll"></div>
+      <div><label class="form-label">Nomor HP</label>
+        <input type="text" class="form-input-pengaturan" id="modal-guru-hp" placeholder="0812-xxxx-xxxx"></div>
+      <div><label class="form-label">Prefix ID</label>
+        <select class="form-select-pengaturan" id="modal-guru-prefix">
+          <option value="MUADDIB">MUADDIB (Ustadz Laki-laki)</option>
+          <option value="MUADIBBAH">MUADIBBAH (Ustadzah Perempuan)</option>
+        </select>
+      </div>
+      <button class="btn btn-primer" style="width:100%" onclick="simpanGuruBaru()">💾 Simpan Guru</button>
+    </div>
+  `;
+            bukaModalUtama();
+        }
+
+        async function simpanGuruBaru() {
+            const nama = document.getElementById('modal-guru-nama').value.trim();
+            const mapel = document.getElementById('modal-guru-mapel').value.trim();
+            const hp = document.getElementById('modal-guru-hp').value.trim();
+            const prefix = document.getElementById('modal-guru-prefix').value;
+            if (!nama) { tampilToast('Nama tidak boleh kosong!', 'error'); return; }
+            const idBaru = generateId(prefix);
+            appState.guru.push({ id: idBaru, nama, mapel, hp: hp || '-', status: 'Aktif', password: appState.pengaturan.passwordGuru });
+            await simpanState();
+            tutupModalUtama();
+            loadDataGuru();
+            tampilToast(`Guru ${nama} berhasil ditambahkan! ID: ${idBaru}`, 'sukses');
+        }
+
+        async function hapusGuru(id) {
+            if (!confirm(`Yakin hapus guru dengan ID ${id}?`)) return;
+            appState.guru = appState.guru.filter(g => g.id !== id);
+            await simpanState();
+            loadDataGuru();
+            tampilToast('Data guru berhasil dihapus.', 'info');
+        }
+
+        // FUNGSI INI TELAH DIPERBARUI MENGGUNAKAN IMAGE API
+        function cetakQRGuru(id) {
+            const guru = appState.guru.find(g => g.id === id);
+            if (!guru) return;
+            document.getElementById('judul-modal-utama').textContent = '🖨️ QR Code Guru — ' + guru.nama;
+            document.getElementById('isi-modal-utama').innerHTML = `
+    <div style="text-align:center;padding:10px">
+      <div style="margin-bottom:10px;font-size:13px;color:var(--teks-sekunder)">ID: <strong style="color:var(--emas)">${guru.id}</strong></div>
+      
+      <!-- Menggunakan Image API agar 100% muncul -->
+      <img src="https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${guru.id}&color=0d3b2e&bgcolor=fdf6e3" style="border-radius:8px; width:200px; height:200px; margin: 0 auto; display: block;" alt="QR Code">
+      
+      <div style="margin-top:10px;font-size:12px;color:var(--teks-sekunder)">Scan untuk mencatat kehadiran ${guru.nama}</div>
+      
+      <!-- Fix untuk fungsi unduh (Membuka gambar HD di tab baru) -->
+      <button class="btn btn-emas" style="margin-top:12px;width:100%" onclick="window.open('https://api.qrserver.com/v1/create-qr-code/?size=500x500&data=${guru.id}&color=0d3b2e&bgcolor=fdf6e3', '_blank')">📥 Buka & Unduh QR HD</button>
+    </div>
+  `;
+            bukaModalUtama();
+        }
+
+        // ============================================================
+        // DATA MURID
+        // ============================================================
+        function loadDataMurid() {
+            document.getElementById('subjudul-murid-count').textContent = `${appState.murid.length} santri terdaftar`;
+            renderTabelMurid();
+        }
+        function renderTabelMurid(filter = '') {
+            const data = appState.murid.filter(m => !filter || m.nama.toLowerCase().includes(filter.toLowerCase()));
+            document.getElementById('tbody-murid').innerHTML = data.map(m => `
+    <tr>
+      <td><code style="color:var(--emas);font-size:12px">${m.id}</code></td>
+      <td><strong>${m.nama}</strong></td>
+      <td>${m.kelas}</td>
+      <td>${m.wali}</td>
+      <td><span class="badge badge-hijau">${m.status}</span></td>
+      <td>
+        <button class="btn btn-bahaya btn-sm" onclick="hapusMurid('${m.id}')">🗑️</button>
+      </td>
+    </tr>
+  `).join('') || '<tr><td colspan="6" style="text-align:center;color:var(--teks-redup)">Tidak ada data</td></tr>';
+        }
+        function filterTabelMurid() { renderTabelMurid(document.getElementById('cari-murid').value); }
+
+        function bukaModalTambahMurid() {
+            document.getElementById('judul-modal-utama').textContent = '➕ Tambah Santri Baru';
+            document.getElementById('isi-modal-utama').innerHTML = `
+    <div class="form-pengaturan">
+      <div><label class="form-label">Nama Lengkap</label>
+        <input type="text" class="form-input-pengaturan" id="modal-murid-nama" placeholder="Nama santri"></div>
+      <div><label class="form-label">Kelas / Halaqah</label>
+        <input type="text" class="form-input-pengaturan" id="modal-murid-kelas" placeholder="Halaqah A / B / C"></div>
+      <div><label class="form-label">Nama Wali</label>
+        <input type="text" class="form-input-pengaturan" id="modal-murid-wali" placeholder="Nama wali murid"></div>
+      <button class="btn btn-primer" style="width:100%" onclick="simpanMuridBaru()">💾 Simpan Santri</button>
+    </div>
+  `;
+            bukaModalUtama();
+        }
+
+        async function simpanMuridBaru() {
+            const nama = document.getElementById('modal-murid-nama').value.trim();
+            const kelas = document.getElementById('modal-murid-kelas').value.trim();
+            const wali = document.getElementById('modal-murid-wali').value.trim();
+            if (!nama) { tampilToast('Nama tidak boleh kosong!', 'error'); return; }
+            const idBaru = generateId('SANTRI');
+            appState.murid.push({ id: idBaru, nama, kelas: kelas || 'Halaqah A', wali: wali || '-', status: 'Aktif', password: appState.pengaturan.passwordMurid });
+            await simpanState();
+            tutupModalUtama();
+            loadDataMurid();
+            tampilToast(`Santri ${nama} berhasil ditambahkan! ID: ${idBaru}`, 'sukses');
+        }
+
+        async function hapusMurid(id) {
+            if (!confirm(`Yakin hapus santri dengan ID ${id}?`)) return;
+            appState.murid = appState.murid.filter(m => m.id !== id);
+            await simpanState();
+            loadDataMurid();
+            tampilToast('Data santri berhasil dihapus.', 'info');
+        }
+
+        // ============================================================
+        // JADWAL
+        // ============================================================
+        function loadJadwalAdmin() {
+            const hari = ['Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'];
+            const wrap = document.getElementById('jadwal-per-hari');
+            wrap.innerHTML = hari.map(h => {
+                const jadwalHari = appState.jadwal.filter(j => j.hari === h);
+                return `
+      <div class="kartu" style="margin-bottom:12px">
+        <div class="kartu-judul">📅 ${h}</div>
+        ${jadwalHari.length ? jadwalHari.map(j => `
+          <div class="jadwal-item">
+            <div class="jadwal-waktu">${j.jam}</div>
+            <div style="flex:1">
+              <div class="jadwal-mapel">${j.mapel}</div>
+              <div class="jadwal-kelas">Kelas: ${j.kelas} | ${(appState.guru.find(g => g.id === j.guru) || { nama: 'Tidak ada' }).nama}</div>
+            </div>
+            <button class="btn btn-bahaya btn-sm" onclick="hapusJadwal('${j.id}')">🗑️</button>
+          </div>
+        `).join('') : '<div style="font-size:12px;color:var(--teks-redup);padding:8px 0">Tidak ada jadwal</div>'}
+      </div>
+    `;
+            }).join('');
+        }
+
+        function bukaModalTambahJadwal() {
+            document.getElementById('judul-modal-utama').textContent = '➕ Tambah Jadwal';
+            document.getElementById('isi-modal-utama').innerHTML = `
+    <div class="form-pengaturan">
+      <div><label class="form-label">Hari</label>
+        <select class="form-select-pengaturan" id="modal-jadwal-hari">
+          ${['Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'].map(h => `<option>${h}</option>`).join('')}
+        </select></div>
+      <div><label class="form-label">Jam (Format: HH:MM - HH:MM)</label>
+        <input type="text" class="form-input-pengaturan" id="modal-jadwal-jam" placeholder="07:00 - 08:30"></div>
+      <div><label class="form-label">Mata Pelajaran</label>
+        <input type="text" class="form-input-pengaturan" id="modal-jadwal-mapel" placeholder="Tahfidz, Tajwid, dll"></div>
+      <div><label class="form-label">Kelas</label>
+        <input type="text" class="form-input-pengaturan" id="modal-jadwal-kelas" placeholder="Halaqah A / Semua"></div>
+      <div><label class="form-label">Guru</label>
+        <select class="form-select-pengaturan" id="modal-jadwal-guru">
+          ${appState.guru.map(g => `<option value="${g.id}">${g.nama}</option>`).join('')}
+        </select></div>
+      <button class="btn btn-primer" style="width:100%" onclick="simpanJadwalBaru()">💾 Simpan Jadwal</button>
+    </div>
+  `;
+            bukaModalUtama();
+        }
+
+        async function simpanJadwalBaru() {
+            const hari = document.getElementById('modal-jadwal-hari').value;
+            const jam = document.getElementById('modal-jadwal-jam').value.trim();
+            const mapel = document.getElementById('modal-jadwal-mapel').value.trim();
+            const kelas = document.getElementById('modal-jadwal-kelas').value.trim();
+            const guru = document.getElementById('modal-jadwal-guru').value;
+            if (!jam || !mapel) { tampilToast('Jam dan mata pelajaran wajib diisi!', 'error'); return; }
+            appState.jadwal.push({ id: generateId('JDW'), hari, jam, mapel, kelas: kelas || 'Semua', guru });
+            await simpanState();
+            tutupModalUtama();
+            loadJadwalAdmin();
+            tampilToast('Jadwal berhasil ditambahkan!', 'sukses');
+        }
+
+        async function hapusJadwal(id) {
+            appState.jadwal = appState.jadwal.filter(j => j.id !== id);
+            await simpanState();
+            loadJadwalAdmin();
+            tampilToast('Jadwal dihapus.', 'info');
+        }
+
+        // ============================================================
+        // PENGATURAN ADMIN
+        // ============================================================
+        function loadPengaturanAdmin() {
+            document.getElementById('set-nama-madrasah').value = appState.pengaturan.namaMadrasah;
+            document.getElementById('set-tahun-ajaran').value = appState.pengaturan.tahunAjaran;
+            document.getElementById('set-jam-masuk').value = appState.pengaturan.jamMasuk;
+            document.getElementById('set-jam-pulang').value = appState.pengaturan.jamPulang;
+            document.getElementById('set-izin-manual').checked = appState.pengaturan.izinManual;
+        }
+
+        async function simpanPengaturan() {
+            appState.pengaturan.namaMadrasah = document.getElementById('set-nama-madrasah').value;
+            appState.pengaturan.tahunAjaran = document.getElementById('set-tahun-ajaran').value;
+            appState.pengaturan.jamMasuk = document.getElementById('set-jam-masuk').value;
+            appState.pengaturan.jamPulang = document.getElementById('set-jam-pulang').value;
+            appState.pengaturan.izinManual = document.getElementById('set-izin-manual').checked;
+            await simpanState();
+            tampilToast('Pengaturan berhasil disimpan!', 'sukses');
+        }
+
+        async function simpanPassword() {
+            const pAdmin = document.getElementById('set-pw-admin').value;
+            const pGuru = document.getElementById('set-pw-guru').value;
+            const pMurid = document.getElementById('set-pw-murid').value;
+            if (pAdmin) appState.pengaturan.passwordAdmin = pAdmin;
+            if (pGuru) appState.pengaturan.passwordGuru = pGuru;
+            if (pMurid) appState.pengaturan.passwordMurid = pMurid;
+            await simpanState();
+            document.getElementById('set-pw-admin').value = '';
+            document.getElementById('set-pw-guru').value = '';
+            document.getElementById('set-pw-murid').value = '';
+            tampilToast('Password berhasil diperbarui!', 'sukses');
+        }
+
+        function konfirmasiResetData() {
+            document.getElementById('judul-modal-utama').textContent = '⚠️ Konfirmasi Reset Data';
+            document.getElementById('isi-modal-utama').innerHTML = `
+    <p style="font-size:13px;color:var(--teks-sekunder);margin-bottom:16px">
+      Tindakan ini akan menghapus <strong style="color:#e74c3c">seluruh data guru, murid, jadwal, dan kehadiran</strong>. 
+      Data tidak dapat dipulihkan. Ketik <strong style="color:var(--emas)">RESET</strong> untuk melanjutkan.
+    </p>
+    <input type="text" class="form-input-pengaturan" id="konfirmasi-reset-input" placeholder="Ketik RESET untuk konfirmasi" style="margin-bottom:12px">
+    <div style="display:flex;gap:8px">
+      <button class="btn btn-bahaya" style="flex:1" onclick="prosesReset()">🗑️ Ya, Reset Semua Data</button>
+      <button class="btn btn-outline" style="flex:1" onclick="tutupModalUtama()">Batal</button>
+    </div>
+  `;
+            bukaModalUtama();
+        }
+
+        async function prosesReset() {
+            if (document.getElementById('konfirmasi-reset-input').value !== 'RESET') {
+                tampilToast('Ketik RESET untuk konfirmasi!', 'error'); return;
+            }
+            appState.guru = []; appState.murid = []; appState.jadwal = []; appState.kehadiran = [];
+            buatDataDummy();
+            await simpanState();
+            tutupModalUtama();
+            tampilToast('Data berhasil direset dengan data dummy.', 'info');
+            loadBerandaAdmin();
+        }
+
+        // ============================================================
+        // BERANDA GURU
+        // ============================================================
+        function loadBerandaGuru() {
+            document.getElementById('teks-sapaan-guru').innerHTML = `${sapaaWaktu()}, <span>${pengguna.nama.split(' ')[0]}</span>!`;
+            document.getElementById('teks-tanggal-guru').textContent = namaHari();
+
+            // Status kehadiran
+            const hariIni = formatTanggal();
+            const kehadiran = appState.kehadiran.find(k => k.tanggal === hariIni && k.penggunaId === pengguna.id);
+            const statusEl = document.getElementById('status-kehadiran-guru');
+            if (kehadiran) {
+                statusEl.style.cssText = 'background:rgba(46,204,113,0.1);border:1px solid rgba(46,204,113,0.3);color:#2ecc71';
+                statusEl.textContent = `✅ Hadir — Jam Masuk: ${kehadiran.jamMasuk}`;
+            } else {
+                statusEl.style.cssText = 'background:rgba(241,196,15,0.1);border:1px solid rgba(241,196,15,0.3);color:#f1c40f';
+                statusEl.textContent = '⏳ Belum Absen Hari Ini';
+            }
+
+            // Jadwal hari ini
+            const hariEn = hariInggris();
+            const hariIdMap = { Monday: 'Senin', Tuesday: 'Selasa', Wednesday: 'Rabu', Thursday: 'Kamis', Friday: 'Jumat', Saturday: 'Sabtu', Sunday: 'Ahad' };
+            const hariId = hariIdMap[hariEn] || '';
+            const jadwalHariIni = appState.jadwal.filter(j => j.hari === hariId && j.guru === pengguna.id);
+            document.getElementById('jadwal-guru-hari-ini').innerHTML = jadwalHariIni.length ?
+                jadwalHariIni.map(j => `
+      <div class="jadwal-item">
+        <div class="jadwal-waktu">${j.jam}</div>
+        <div><div class="jadwal-mapel">${j.mapel}</div><div class="jadwal-kelas">Kelas: ${j.kelas}</div></div>
+      </div>
+    `).join('') :
+                `<div class="empty-state"><div class="empty-state-ikon">📅</div><div class="empty-state-teks">Tidak ada jadwal hari ini</div></div>`;
+        }
+
+        async function gantiPasswordGuru() {
+            const pwLama = document.getElementById('guru-pw-lama').value;
+            const pwBaru = document.getElementById('guru-pw-baru').value;
+
+            if (!pwLama || !pwBaru) {
+                tampilToast('Password lama dan baru harus diisi!', 'error');
+                return;
+            }
+
+            const currentPw = pengguna.data.password || appState.pengaturan.passwordGuru;
+            if (pwLama !== currentPw) {
+                tampilToast('Password lama salah!', 'error');
+                return;
+            }
+
+            const guruIndex = appState.guru.findIndex(g => g.id === pengguna.id);
+            if (guruIndex !== -1) {
+                appState.guru[guruIndex].password = pwBaru;
+                pengguna.data.password = pwBaru; // Update session
+                await simpanState();
+                tampilToast('Password berhasil diperbarui!', 'sukses');
+                document.getElementById('guru-pw-lama').value = '';
+                document.getElementById('guru-pw-baru').value = '';
+            }
+        }
+
+        // ============================================================
+        // SCAN KEHADIRAN (digunakan guru dan admin mode scan)
+        // ============================================================
+        function loadScanGuru() {
+            // Sembunyikan bagian Input Manual apabila user yang login adalah guru
+            const inputManual = document.getElementById('kartu-input-manual');
+            if (inputManual) {
+                inputManual.style.display = (pengguna.role === 'admin') ? 'block' : 'none';
+            }
+            renderLogScan();
+        }
+
+        function mulaiKamera() {
+            if (!navigator.mediaDevices?.getUserMedia) {
+                tampilToast('Kamera tidak didukung di browser ini.', 'error'); return;
+            }
+            navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } })
+                .then(stream => {
+                    streamKamera = stream;
+                    const video = document.getElementById('video-kamera');
+                    video.srcObject = stream;
+                    document.getElementById('btn-mulai-kamera').disabled = true;
+                    document.getElementById('btn-henti-kamera').disabled = false;
+                    intervalScan = setInterval(scanFrame, 300);
+                    tampilToast('Kamera aktif. Arahkan QR Code!', 'sukses');
+                })
+                .catch(() => tampilToast('Gagal mengakses kamera. Coba input manual.', 'error'));
+        }
+
+        function hentiKamera() {
+            if (streamKamera) { streamKamera.getTracks().forEach(t => t.stop()); streamKamera = null; }
+            clearInterval(intervalScan);
+            const btn1 = document.getElementById('btn-mulai-kamera');
+            const btn2 = document.getElementById('btn-henti-kamera');
+            if (btn1) btn1.disabled = false;
+            if (btn2) btn2.disabled = true;
+        }
+
+        function scanFrame() {
+            const video = document.getElementById('video-kamera');
+            const canvas = document.getElementById('canvas-kamera');
+            if (!video || video.readyState !== video.HAVE_ENOUGH_DATA) return;
+            canvas.height = video.videoHeight;
+            canvas.width = video.videoWidth;
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+            const img = ctx.getImageData(0, 0, canvas.width, canvas.height);
+            if (typeof jsQR !== 'undefined') {
+                const code = jsQR(img.data, img.width, img.height);
+                if (code) {
+                    clearInterval(intervalScan);
+                    prosesHasilScan(code.data);
+                    setTimeout(() => { if (streamKamera) intervalScan = setInterval(scanFrame, 300); }, 3000);
+                }
+            }
+        }
+
+        function prosesManualScan() {
+            const id = document.getElementById('input-manual-id').value.trim().toUpperCase();
+            if (!id) { tampilToast('Masukkan ID terlebih dahulu!', 'error'); return; }
+            prosesHasilScan(id);
+            document.getElementById('input-manual-id').value = '';
+        }
+
+        async function prosesHasilScan(id) {
+            const semua = [...appState.guru, ...appState.murid];
+            const orang = semua.find(o => o.id === id);
+            if (!orang) { tampilToast(`ID "${id}" tidak ditemukan!`, 'error'); return; }
+
+            const tglHariIni = formatTanggal();
+            const waktuSekarang = formatWaktu();
+            const batasJam = appState.pengaturan.jamPulang;
+            let existing = appState.kehadiran.find(k => k.tanggal === tglHariIni && k.penggunaId === orang.id);
+
+            let aksi = '';
+            if (!existing) {
+                // Jam Masuk
+                const entri = {
+                    id: `KHD-${Date.now()}`,
+                    penggunaId: orang.id, nama: orang.nama,
+                    role: orang.id.startsWith('SANTRI') ? 'murid' : 'guru',
+                    tanggal: tglHariIni, jamMasuk: waktuSekarang, jamPulang: null,
+                };
+                appState.kehadiran.push(entri);
+                aksi = 'JAM MASUK';
+            } else if (!existing.jamPulang && waktuSekarang >= batasJam) {
+                // Jam Pulang
+                existing.jamPulang = waktuSekarang;
+                aksi = 'JAM PULANG';
+            } else if (!existing.jamPulang) {
+                tampilToast(`${orang.nama} sudah tercatat masuk pukul ${existing.jamMasuk}`, 'peringatan'); return;
+            } else {
+                tampilToast(`${orang.nama} sudah lengkap hari ini (Masuk: ${existing.jamMasuk}, Pulang: ${existing.jamPulang})`, 'info'); return;
+            }
+
+            await simpanState();
+            tampilModalSuksesScan(orang, aksi, waktuSekarang);
+            renderLogScan();
+        }
+
+        function tampilModalSuksesScan(orang, aksi, waktu) {
+            const doaArr = [
+                { arab: 'بِسْمِ اللّٰهِ الرَّحْمٰنِ الرَّحِيْمِ', latin: 'Bismillahirrahmanirrahim' },
+                { arab: 'اَللّٰهُمَّ بَارِكْ لَنَا', latin: 'Allahumma barik lana' },
+                { arab: 'رَبِّ زِدْنِيْ عِلْمًا', latin: "Robbi zidni 'ilma" },
+            ];
+            const doa = doaArr[Math.floor(Math.random() * doaArr.length)];
+            const warnaAksi = aksi === 'JAM MASUK' ? '#2ecc71' : '#3498db';
+            document.getElementById('judul-modal-utama').textContent = '✅ Kehadiran Dicatat';
+            document.getElementById('isi-modal-utama').innerHTML = `
+    <div class="modal-sukses-scan">
+      <div class="modal-sukses-ikon">${orang.id.startsWith('SANTRI') ? '📖' : '👨‍🏫'}</div>
+      <div class="modal-sukses-nama">${orang.nama}</div>
+      <div class="modal-sukses-waktu">${waktu} WIB</div>
+      <span class="modal-sukses-status" style="background:${warnaAksi}22;color:${warnaAksi};border:1px solid ${warnaAksi}44">
+        ${aksi === 'JAM MASUK' ? '✅ JAM MASUK' : '🏃 JAM PULANG'}
+      </span>
+      <div class="divider"></div>
+      <div class="modal-sukses-doa">${doa.arab}</div>
+      <div class="modal-sukses-doa-latin">${doa.latin}</div>
+    </div>
+  `;
+            bukaModalUtama();
+            setTimeout(tutupModalUtama, 3500);
+        }
+
+        function renderLogScan() {
+            const tgl = formatTanggal();
+            const log = appState.kehadiran.filter(k => k.tanggal === tgl).slice(-10).reverse();
+            const el = document.getElementById('log-scan-hari-ini');
+            if (!el) return;
+            el.innerHTML = log.length ? log.map(k => `
+    <div class="feed-item">
+      <div class="feed-ikon" style="background:rgba(46,204,113,0.1)">${k.role === 'guru' ? '👨‍🏫' : '📖'}</div>
+      <div class="feed-konten">
+        <div class="feed-nama">${k.nama}</div>
+        <div class="feed-aksi">Masuk: ${k.jamMasuk} ${k.jamPulang ? '| Pulang: ' + k.jamPulang : ''}</div>
+      </div>
+    </div>
+  `).join('') : '<div class="empty-state"><div class="empty-state-teks">Belum ada scan hari ini</div></div>';
+        }
+
+        // FUNGSI INI TELAH DIPERBARUI MENGGUNAKAN IMAGE API
+        function loadIdGuru() {
+            const guru = appState.guru.find(g => g.id === pengguna.id);
+            if (!guru) { document.getElementById('kartu-id-guru-wrap').innerHTML = '<div class="empty-state">Data tidak ditemukan</div>'; return; }
+            document.getElementById('kartu-id-guru-wrap').innerHTML = `
+    <div class="kartu-id-digital">
+      <div class="kartu-id-header">
+        <img src="https://raw.githubusercontent.com/gamesfaqih2025-byte/AL-KHIDMAT-DIGITAL/refs/heads/main/Desain%20tanpa%20judul.png"
+          class="kartu-id-logo" onerror="this.style.display='none'">
+        <div>
+          <div class="kartu-id-sistem">Al-Khidmat Digital</div>
+          <div class="kartu-id-sub">${appState.pengaturan.namaMadrasah}</div>
+        </div>
+      </div>
+      <div class="kartu-id-avatar">${guru.nama.charAt(0)}</div>
+      <div class="kartu-id-nama">${guru.nama}</div>
+      <div class="kartu-id-nip">${guru.id}</div>
+      <div class="kartu-id-jabatan">Guru — ${guru.mapel}</div>
+      
+      <!-- Menggunakan Image API agar 100% muncul -->
+      <img src="https://api.qrserver.com/v1/create-qr-code/?size=160x160&data=${guru.id}&color=0d3b2e&bgcolor=fdf6e3" style="border-radius:var(--radius-sm); width:160px; height:160px; margin: 14px auto; display: block;" alt="QR Code">
+      
+      <div class="kartu-id-footer">${appState.pengaturan.tahunAjaran} • Scan untuk absensi</div>
+    </div>
+  `;
+        }
+
+        // ============================================================
+        // DHABIT MURID (GURU)
+        // ============================================================
+        function loadDhabitGuru() {
+            renderTabelDhabit();
+        }
+        function renderTabelDhabit(filter = '') {
+            const tglKerja = [];
+            for (let i = 13; i >= 0; i--) {
+                const t = new Date(); t.setDate(t.getDate() - i);
+                if (t.getDay() !== 0 && t.getDay() !== 6) tglKerja.push(formatTanggal(t));
+            }
+            const data = appState.murid.filter(m => !filter || m.nama.toLowerCase().includes(filter.toLowerCase()));
+            document.getElementById('tbody-dhabit').innerHTML = data.map(m => {
+                const hadir = tglKerja.filter(tgl => appState.kehadiran.find(k => k.tanggal === tgl && k.penggunaId === m.id)).length;
+                const terlambat = Math.floor(Math.random() * 3);
+                const absen = tglKerja.length - hadir;
+                const persen = Math.round((hadir / tglKerja.length) * 100);
+                const predikat = persen >= 90 ? '⭐ Mumtaz' : persen >= 75 ? '✅ Jayyid' : persen >= 60 ? '⚠️ Maqbul' : '❌ Dhoif';
+                const warna = persen >= 90 ? 'badge-emas' : persen >= 75 ? 'badge-hijau' : persen >= 60 ? 'badge-kuning' : 'badge-merah';
+                return `<tr>
+      <td><code style="color:var(--emas);font-size:11px">${m.id}</code></td>
+      <td>${m.nama}</td>
+      <td><span class="badge badge-hijau">${hadir}</span></td>
+      <td><span class="badge badge-merah">${absen}</span></td>
+      <td><span class="badge badge-kuning">${terlambat}</span></td>
+      <td>
+        <div style="display:flex;align-items:center;gap:8px">
+          <div style="flex:1;height:6px;background:var(--border);border-radius:3px">
+            <div style="width:${persen}%;height:6px;background:linear-gradient(90deg,var(--zamrud),var(--emas));border-radius:3px"></div>
+          </div>
+          <span style="font-size:12px;font-weight:600;color:var(--teks-utama)">${persen}%</span>
+        </div>
+      </td>
+      <td><span class="badge ${warna}">${predikat}</span></td>
+    </tr>`;
+            }).join('');
+        }
+        function filterDhabit() { renderTabelDhabit(document.getElementById('cari-dhabit').value); }
+
+        // ============================================================
+        // CATATAN GURU
+        // ============================================================
+        function loadCatatanGuru() {
+            const tgl = formatTanggal();
+            document.getElementById('subjudul-catatan-guru').textContent = namaHari();
+            const kunci = `${pengguna.id}_${tgl}`;
+            const tersimpan = appState.catatan[kunci] || '';
+            document.getElementById('textarea-catatan').value = tersimpan;
+            // Auto-save
+            document.getElementById('textarea-catatan').oninput = () => {
+                clearTimeout(document.getElementById('textarea-catatan')._timer);
+                document.getElementById('status-simpan-catatan').textContent = 'Mengetik...';
+                document.getElementById('textarea-catatan')._timer = setTimeout(() => simpanCatatan(true), 1500);
+            };
+        }
+        async function simpanCatatan(otomatis = false) {
+            const kunci = `${pengguna.id}_${formatTanggal()}`;
+            appState.catatan[kunci] = document.getElementById('textarea-catatan').value;
+            await simpanState();
+            document.getElementById('status-simpan-catatan').textContent = otomatis ? '✅ Auto-tersimpan' : '✅ Tersimpan!';
+            if (!otomatis) tampilToast('Catatan berhasil disimpan!', 'sukses');
+        }
+
+        // ============================================================
+        // BERANDA MURID
+        // ============================================================
+        function loadBerandaMurid() {
+            document.getElementById('teks-sapaan-murid').innerHTML = `${sapaaWaktu()}, <span>${pengguna.nama.split(' ')[0]}</span>!`;
+            document.getElementById('teks-tanggal-murid').textContent = namaHari();
+
+            // Progress ring
+            const tglKerja = [];
+            const bln = new Date().getMonth(); const thn = new Date().getFullYear();
+            for (let d = 1; d <= new Date().getDate(); d++) {
+                const t = new Date(thn, bln, d);
+                if (t.getDay() !== 0 && t.getDay() !== 6) tglKerja.push(formatTanggal(t));
+            }
+            const hadirBulan = tglKerja.filter(tgl => appState.kehadiran.find(k => k.tanggal === tgl && k.penggunaId === pengguna.id)).length;
+            const persen = tglKerja.length ? Math.round((hadirBulan / tglKerja.length) * 100) : 0;
+            const circumference = 2 * Math.PI * 50;
+            const offset = circumference - (persen / 100) * circumference;
+            const ring = document.getElementById('ring-circle-murid');
+            if (ring) { ring.style.strokeDashoffset = offset; }
+            const persenEl = document.getElementById('ring-persen-murid');
+            if (persenEl) persenEl.textContent = persen + '%';
+
+            // Jadwal hari ini
+            const hariEn = hariInggris();
+            const hariIdMap = { Monday: 'Senin', Tuesday: 'Selasa', Wednesday: 'Rabu', Thursday: 'Kamis', Friday: 'Jumat', Saturday: 'Sabtu', Sunday: 'Ahad' };
+            const hariId = hariIdMap[hariEn] || '';
+            const jadwalHariIni = appState.jadwal.filter(j => j.hari === hariId);
+            document.getElementById('jadwal-murid-hari-ini').innerHTML = jadwalHariIni.length ?
+                jadwalHariIni.map(j => {
+                    const guru = appState.guru.find(g => g.id === j.guru);
+                    return `<div class="jadwal-item">
+        <div class="jadwal-waktu">${j.jam}</div>
+        <div><div class="jadwal-mapel">${j.mapel}</div><div class="jadwal-kelas">${guru ? guru.nama : ''}</div></div>
+      </div>`;
+                }).join('') :
+                '<div class="empty-state"><div class="empty-state-ikon">📅</div><div class="empty-state-teks">Tidak ada jadwal hari ini</div></div>';
+        }
+
+        // ============================================================
+        // KALENDER KEHADIRAN MURID
+        // ============================================================
+        function loadKalenderMurid() {
+            renderKalender();
+        }
+
+        function navigasiKalender(delta) {
+            bulanKalender += delta;
+            if (bulanKalender > 11) { bulanKalender = 0; tahunKalender++; }
+            if (bulanKalender < 0) { bulanKalender = 11; tahunKalender--; }
+            renderKalender();
+        }
+
+        function renderKalender() {
+            const namaBulan = new Date(tahunKalender, bulanKalender, 1)
+                .toLocaleDateString('id-ID', { month: 'long', year: 'numeric' });
+            document.getElementById('label-bulan-kalender').textContent = namaBulan;
+            document.getElementById('subjudul-kalender-murid').textContent = `Bulan ${namaBulan}`;
+
+            const hariLabels = ['Min', 'Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab'];
+            const jumlahHari = new Date(tahunKalender, bulanKalender + 1, 0).getDate();
+            const hariPertama = new Date(tahunKalender, bulanKalender, 1).getDay();
+
+            let html = hariLabels.map(h => `<div class="kalender-hari-label">${h}</div>`).join('');
+            for (let i = 0; i < hariPertama; i++) html += `<div class="kalender-sel kal-kosong"></div>`;
+
+            for (let d = 1; d <= jumlahHari; d++) {
+                const tgl = new Date(tahunKalender, bulanKalender, d);
+                const tglStr = formatTanggal(tgl);
+                const hari = tgl.getDay();
+                const isWeekend = hari === 0 || hari === 6;
+                const isToday = tglStr === formatTanggal();
+                let kls = '', status = '';
+
+                if (isWeekend) { kls = 'kal-libur'; status = 'L'; }
+                else {
+                    const k = appState.kehadiran.find(x => x.tanggal === tglStr && x.penggunaId === pengguna.id);
+                    if (k) { kls = 'kal-hadir'; status = '✓'; }
+                    else if (tgl <= new Date()) {
+                        const rand = Math.random();
+                        if (rand > 0.85) { kls = 'kal-sakit'; status = 'S'; }
+                        else if (rand > 0.75) { kls = 'kal-izin'; status = 'I'; }
+                        else { kls = 'kal-absen'; status = '✗'; }
+                    }
+                }
+
+                html += `<div class="kalender-sel ${kls} ${isToday ? 'kal-hari-ini' : ''}" title="${tglStr}">
+      ${status || d}
+    </div>`;
+            }
+            document.getElementById('kalender-grid-murid').innerHTML = html;
+        }
+
+        // ============================================================
+        // TUGAS MURID
+        // ============================================================
+        function loadTugasMurid() {
+            const tugas = [
+                { ikon: '📖', judul: 'Hafalan Surat Al-Mulk', mapel: 'Tahfidz', deadline: '3 hari lagi', urgen: true },
+                { ikon: '✏️', judul: 'Latihan Khat Naskhi', mapel: 'Kaligrafi', deadline: '7 hari lagi', urgen: false },
+                { ikon: '📚', judul: 'Ringkasan Bab Thaharah', mapel: 'Fiqih', deadline: '2 hari lagi', urgen: true },
+                { ikon: '🗣️', judul: 'Mufradat Bab Al-Bayt', mapel: 'Bahasa Arab', deadline: '5 hari lagi', urgen: false },
+                { ikon: '📝', judul: 'Muroja\'ah Juz 30', mapel: 'Tahfidz', deadline: '1 hari lagi', urgen: true },
+            ];
+            document.getElementById('daftar-tugas-murid').innerHTML = tugas.map(t => `
+    <div class="tugas-item">
+      <div class="tugas-ikon">${t.ikon}</div>
+      <div class="tugas-konten">
+        <div class="tugas-judul">${t.judul}</div>
+        <div class="tugas-mapel">${t.mapel}</div>
+        <div class="tugas-deadline">⏰ ${t.deadline}</div>
+      </div>
+      <span class="badge ${t.urgen ? 'badge-merah' : 'badge-hijau'}">${t.urgen ? '🔴 Urgent' : '✅ Ok'}</span>
+    </div>
+  `).join('');
+        }
+
+        // ============================================================
+        // PRESTASI MURID
+        // ============================================================
+        function loadPrestasiMurid() {
+            const prestasi = [
+                { medali: '🥇', nama: 'Juara 1 Tahfidz Juz 30', tgl: 'Muharram 1446 H' },
+                { medali: '🥈', nama: 'Juara 2 Musabaqah Kaligrafi', tgl: 'Safar 1446 H' },
+                { medali: '🏅', nama: 'Santri Teladan Bulan Ini', tgl: 'Rabi\' Awwal 1446 H' },
+                { medali: '⭐', nama: 'Penilaian Akhlak Terbaik', tgl: 'Rabi\' Tsani 1446 H' },
+            ];
+            document.getElementById('daftar-prestasi-murid').innerHTML = prestasi.map(p => `
+    <div class="prestasi-item">
+      <div class="prestasi-medali">${p.medali}</div>
+      <div>
+        <div class="prestasi-nama">${p.nama}</div>
+        <div class="prestasi-tgl">📅 ${p.tgl}</div>
+      </div>
+    </div>
+  `).join('');
+        }
+
+        // ============================================================
+        // MODE DEMO SCAN
+        // ============================================================
+        function bukaModeDemo() {
+            document.getElementById('judul-modal-utama').textContent = '🎬 Mode Demo Scan';
+            const semua = [...appState.guru, ...appState.murid];
+            document.getElementById('isi-modal-utama').innerHTML = `
+    <p style="font-size:13px;color:var(--teks-sekunder);margin-bottom:12px">Pilih pengguna untuk simulasi scan kehadiran:</p>
+    <div style="display:flex;flex-direction:column;gap:8px;max-height:320px;overflow-y:auto">
+      ${semua.map(o => `
+        <button class="btn btn-outline" style="justify-content:flex-start;gap:10px" onclick="prosesHasilScan('${o.id}');tutupModalUtama()">
+          <span>${o.id.startsWith('SANTRI') ? '📖' : '👨‍🏫'}</span>
+          <span style="flex:1;text-align:left">${o.nama}</span>
+          <code style="font-size:10px;color:var(--emas)">${o.id}</code>
+        </button>
+      `).join('')}
+    </div>
+  `;
+            bukaModalUtama();
+        }
+
+        // ============================================================
+        // MODAL UNIVERSAL
+        // ============================================================
+        function bukaModalUtama() {
+            document.getElementById('overlay-modal-utama').classList.remove('tersembunyi');
+        }
+        function tutupModalUtama(event) {
+            if (event && event.target !== document.getElementById('overlay-modal-utama')) return;
+            document.getElementById('overlay-modal-utama').classList.add('tersembunyi');
+        }
+
+        // ============================================================
+        // KIOSK SCAN PUBLIK
+        // ============================================================
+        function bukaKioskScan() {
+            document.getElementById('kiosk-scan-wrap').classList.remove('tersembunyi');
+            mulaiKiosk();
+        }
+        function tutupKiosk() {
+            if (streamKiosk) { streamKiosk.getTracks().forEach(t => t.stop()); streamKiosk = null; }
+            clearInterval(intervalScanKiosk);
+            document.getElementById('kiosk-scan-wrap').classList.add('tersembunyi');
+        }
+        function mulaiKiosk() {
+            if (!navigator.mediaDevices?.getUserMedia) { tampilToast('Kamera tidak tersedia.', 'error'); return; }
+            navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } })
+                .then(stream => {
+                    streamKiosk = stream;
+                    document.getElementById('video-kiosk').srcObject = stream;
+                    intervalScanKiosk = setInterval(() => {
+                        const v = document.getElementById('video-kiosk'), c = document.getElementById('canvas-kiosk');
+                        if (!v || v.readyState !== v.HAVE_ENOUGH_DATA) return;
+                        c.width = v.videoWidth; c.height = v.videoHeight;
+                        const ctx = c.getContext('2d'); ctx.drawImage(v, 0, 0);
+                        if (typeof jsQR !== 'undefined') {
+                            const img = ctx.getImageData(0, 0, c.width, c.height);
+                            const code = jsQR(img.data, img.width, img.height);
+                            if (code) {
+                                clearInterval(intervalScanKiosk);
+                                prosesHasilScan(code.data);
+                                setTimeout(() => { if (streamKiosk) intervalScanKiosk = setInterval(arguments.callee, 300); }, 3000);
+                            }
+                        }
+                    }, 300);
+                })
+                .catch(() => tampilToast('Gagal mengakses kamera.', 'error'));
+        }
+
+        // ============================================================
+        // JAM DIGITAL
+        // ============================================================
+        function jalankanJam() {
+            clearInterval(intervalJam);
+            function updateJam() {
+                const sekarang = new Date();
+                const str = sekarang.toLocaleTimeString('id-ID', { hour12: false });
+                const el = document.getElementById('topbar-jam');
+                if (el) el.textContent = str;
+            }
+            updateJam();
+            intervalJam = setInterval(updateJam, 1000);
+        }
+
+        // ============================================================
+        // TEMA GELAP / TERANG
+        // ============================================================
+        function toggleTema() {
+            const html = document.documentElement;
+            const temaSaatIni = html.getAttribute('data-theme');
+            const temaBaru = temaSaatIni === 'dark' ? 'light' : 'dark';
+            html.setAttribute('data-theme', temaBaru);
+            document.getElementById('btn-tema').textContent = temaBaru === 'dark' ? '🌙' : '☀️';
+            localStorage.setItem('akd_tema', temaBaru);
+        }
+        function muatTema() {
+            const tersimpan = localStorage.getItem('akd_tema');
+            if (tersimpan) {
+                document.documentElement.setAttribute('data-theme', tersimpan);
+                const btn = document.getElementById('btn-tema');
+                if (btn) btn.textContent = tersimpan === 'dark' ? '🌙' : '☀️';
+            }
+        }
+
+        // ============================================================
+        // INISIALISASI
+        // ============================================================
+        async function init() {
+            muatTema();
+            await inisialisasiData();
+            tampilToast('Sistem siap! بِسْمِ اللّٰهِ 🌙', 'sukses');
+        }
+
+        window.addEventListener('DOMContentLoaded', init);
+    </script>
+</body>
+
+</html>
