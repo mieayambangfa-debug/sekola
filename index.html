@@ -2106,6 +2106,35 @@
 
             <!-- KONTEN UTAMA -->
             <main class="konten-utama" id="konten-utama">
+                <!-- ========== HALAMAN: DHABIT MURID (GURU) ========== -->
+                <section class="halaman" id="halaman-dhabit-guru">
+                    <div class="halaman-header">
+                        <div>
+                            <div class="halaman-judul">📊 Dhabit Murid</div>
+                            <div class="halaman-subjudul">Rekap kehadiran 14 hari terakhir</div>
+                        </div>
+                        <input type="text" class="input-cari" id="cari-dhabit" placeholder="🔍 Cari santri..."
+                            oninput="filterDhabit()">
+                    </div>
+                    <div class="kartu">
+                        <div class="tabel-container">
+                            <table class="tabel-data">
+                                <thead>
+                                    <tr>
+                                        <th>Kode ID</th>
+                                        <th>Nama</th>
+                                        <th>Hadir</th>
+                                        <th>Absen</th>
+                                        <th>Terlambat</th>
+                                        <th>% Kehadiran</th>
+                                        <th>Predikat</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="tbody-dhabit"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </section>
 
                 <!-- ========== HALAMAN: BERANDA ADMIN ========== -->
                 <section class="halaman" id="halaman-beranda-admin">
@@ -3446,9 +3475,15 @@
         }
 
         function mulaiKamera() {
-            if (!navigator.mediaDevices?.getUserMedia) return tampilToast('Kamera tidak didukung di browser ini.', 'error');
+            if (!navigator.mediaDevices?.getUserMedia)
+                return tampilToast('Kamera tidak didukung di browser ini.', 'error');
 
-            // PERBAIKAN: Memaksa browser meminta resolusi kamera tinggi (HD)
+            // Cek dulu apakah jsQR sudah dimuat
+            if (typeof jsQR === 'undefined') {
+                tampilToast('Library scan (jsQR) gagal dimuat. Coba refresh halaman!', 'error');
+                return;
+            }
+
             const constraints = {
                 video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } }
             };
@@ -3462,14 +3497,23 @@
                     document.getElementById('btn-mulai-kamera').disabled = true;
                     document.getElementById('btn-henti-kamera').disabled = false;
 
-                    // PERBAIKAN: Gunakan requestAnimationFrame menggantikan setInterval
-                    video.onloadedmetadata = () => {
-                        video.play();
+                    // FIX: Gunakan 'loadeddata' sebagai fallback + polling manual
+                    const startScan = () => {
                         isScanningKamera = true;
                         requestAnimationFrame(scanFrame);
+                        tampilToast('Kamera aktif. Arahkan QR Code!', 'sukses');
                     };
-                    tampilToast('Kamera aktif. Arahkan QR Code!', 'sukses');
-                }).catch(() => tampilToast('Gagal mengakses kamera. Coba input manual.', 'error'));
+
+                    video.onloadedmetadata = () => video.play().then(startScan).catch(startScan);
+                    // Fallback kalau event tidak terpicu
+                    setTimeout(() => {
+                        if (!isScanningKamera && streamKamera) startScan();
+                    }, 2000);
+
+                }).catch(err => {
+                    console.error('Kamera error:', err);
+                    tampilToast('Gagal mengakses kamera: ' + err.message, 'error');
+                });
         }
 
         function hentiKamera() {
@@ -3480,40 +3524,36 @@
         }
 
         function scanFrame() {
-            if (!isScanningKamera) return; // Keluar jika kamera dihentikan
+            if (!isScanningKamera) return;
 
             const video = document.getElementById('video-kamera');
             const canvas = document.getElementById('canvas-kamera');
 
-            if (video && video.readyState === video.HAVE_ENOUGH_DATA) {
-                canvas.height = video.videoHeight;
-                canvas.width = video.videoWidth;
+            if (video && video.readyState >= 2) { // >= 2 lebih toleran dari HAVE_ENOUGH_DATA
+                canvas.height = video.videoHeight || 480;
+                canvas.width = video.videoWidth || 640;
 
-                // PERBAIKAN: Tambah willReadFrequently untuk optimasi canvas
-                const ctx = canvas.getContext('2d', { willReadFrequently: true });
-                ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-                const img = ctx.getImageData(0, 0, canvas.width, canvas.height);
+                // FIX: Buat canvas in-memory terpisah agar display:none tidak masalah
+                const offscreen = document.createElement('canvas');
+                offscreen.width = canvas.width;
+                offscreen.height = canvas.height;
+                const ctx = offscreen.getContext('2d', { willReadFrequently: true });
+                ctx.drawImage(video, 0, 0, offscreen.width, offscreen.height);
+                const img = ctx.getImageData(0, 0, offscreen.width, offscreen.height);
 
                 if (typeof jsQR !== 'undefined') {
-                    // PERBAIKAN: Parameter inversionAttempts untuk QR Code yang agak blur / kontras jelek
                     const code = jsQR(img.data, img.width, img.height, { inversionAttempts: "attemptBoth" });
-
                     if (code && code.data) {
-                        isScanningKamera = false; // Jeda pemindaian sejenak
+                        isScanningKamera = false;
+                        console.log('QR Terdeteksi:', code.data); // debug
                         prosesHasilScan(code.data.trim().toUpperCase());
-
-                        // Lanjut scan lagi setelah 3 detik
                         setTimeout(() => {
-                            if (streamKamera) {
-                                isScanningKamera = true;
-                                requestAnimationFrame(scanFrame);
-                            }
+                            if (streamKamera) { isScanningKamera = true; requestAnimationFrame(scanFrame); }
                         }, 3000);
-                        return; // Keluar fungsi agar frame tidak di-request ganda
+                        return;
                     }
                 }
             }
-            // Loop secara efisien mengikuti refresh rate layar
             requestAnimationFrame(scanFrame);
         }
 
